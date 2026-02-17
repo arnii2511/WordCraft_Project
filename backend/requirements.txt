@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+pydantic
+motor
+python-dotenv
+passlib[bcrypt]
+python-jose[cryptography]
+sentence-transformers
+spacy
+nltk
+numpy
+scipy
+scikit-learn
+requests
+pronouncing
+pytest

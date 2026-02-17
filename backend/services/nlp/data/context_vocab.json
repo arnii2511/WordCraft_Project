@@ -1,0 +1,192 @@
+{
+  "neutral": {
+    "description": "clear, balanced language without strong emotional bias",
+    "words": [
+      "clear",
+      "steady",
+      "plain",
+      "direct",
+      "measured",
+      "simple",
+      "balanced",
+      "calm",
+      "neutral",
+      "focused",
+      "even",
+      "literal",
+      "objective",
+      "straightforward"
+    ]
+  },
+  "nostalgia": {
+    "description": "a gentle longing for the past",
+    "words": [
+      "wistful",
+      "faded",
+      "lingering",
+      "golden",
+      "distant",
+      "soft",
+      "warm",
+      "tender",
+      "remembered",
+      "yesterday",
+      "sepia",
+      "gentle",
+      "echoing",
+      "old-fashioned"
+    ]
+  },
+  "horror": {
+    "description": "fear and unease",
+    "words": [
+      "eerie",
+      "haunting",
+      "sinister",
+      "shadowy",
+      "ominous",
+      "chilling",
+      "grim",
+      "dreadful",
+      "macabre",
+      "lurking",
+      "ghastly",
+      "bleak",
+      "unnerving",
+      "foreboding"
+    ]
+  },
+  "romantic": {
+    "description": "affection and warmth",
+    "words": [
+      "tender",
+      "gentle",
+      "passionate",
+      "warm",
+      "delicate",
+      "loving",
+      "intimate",
+      "soft",
+      "affectionate",
+      "devoted",
+      "adoring",
+      "heartfelt",
+      "serene",
+      "graceful"
+    ]
+  },
+  "academic": {
+    "description": "analysis with clarity and precision",
+    "words": [
+      "analytical",
+      "rigorous",
+      "methodical",
+      "objective",
+      "systematic",
+      "evidence-based",
+      "precise",
+      "structured",
+      "formal",
+      "scholarly",
+      "theoretical",
+      "measured",
+      "critical",
+      "concise"
+    ]
+  },
+  "joyful": {
+    "description": "light and uplifting energy",
+    "words": [
+      "bright",
+      "cheerful",
+      "lively",
+      "radiant",
+      "playful",
+      "vibrant",
+      "sunny",
+      "gleeful",
+      "buoyant",
+      "upbeat",
+      "sparkling",
+      "lighthearted",
+      "merry",
+      "jubilant"
+    ]
+  },
+  "melancholic": {
+    "description": "soft sadness and reflective quiet",
+    "words": [
+      "somber",
+      "wistful",
+      "muted",
+      "aching",
+      "quiet",
+      "heavy",
+      "downcast",
+      "dim",
+      "sorrowful",
+      "pensive",
+      "gloomy",
+      "dusky",
+      "fading",
+      "hushed"
+    ]
+  },
+  "hopeful": {
+    "description": "optimism and forward-looking calm",
+    "words": [
+      "promising",
+      "bright",
+      "rising",
+      "patient",
+      "steady",
+      "gentle",
+      "open",
+      "encouraging",
+      "renewed",
+      "optimistic",
+      "forward",
+      "fresh",
+      "calm",
+      "assured"
+    ]
+  },
+  "mysterious": {
+    "description": "intrigue and concealed meaning",
+    "words": [
+      "enigmatic",
+      "veiled",
+      "secretive",
+      "shadowed",
+      "cryptic",
+      "obscure",
+      "hidden",
+      "silent",
+      "uncertain",
+      "elusive",
+      "hushed",
+      "unknown",
+      "arcane",
+      "subtle"
+    ]
+  },
+  "formal": {
+    "description": "polished and restrained tone",
+    "words": [
+      "proper",
+      "measured",
+      "respectful",
+      "polished",
+      "restrained",
+      "official",
+      "courteous",
+      "refined",
+      "dignified",
+      "ceremonial",
+      "composed",
+      "precise",
+      "neutral",
+      "professional"
+    ]
+  }
+}
