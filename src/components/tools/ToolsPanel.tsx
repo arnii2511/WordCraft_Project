@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { constraintsAPI, favoritesAPI, lexicalAPI, onewordAPI } from '../../services/api';
 import type {
   ConstraintRelation,
   ConstraintResult,
-  LexicalTask,
   LexicalResultDetail,
+  LexicalTask,
   OneWordResult,
   SelectionPayload,
 } from '../../types';
@@ -13,17 +13,16 @@ interface ToolsPanelProps {
   isOpen?: boolean;
   onClose?: () => void;
   selection?: SelectionPayload | null;
-  onInsertWord: (word: string) => void;
   isAuthenticated?: boolean;
   context?: string;
+  onContextChange?: (value: string) => void;
   embedded?: boolean;
   activeTool?: ToolTab;
   onActiveToolChange?: (tool: ToolTab) => void;
 }
 
-export type ToolTab = LexicalTask | 'smart_match' | 'one_word';
+export type ToolTab = 'synonyms' | 'rhymes' | 'smart_match' | 'one_word';
 
-const LEXICAL_TASKS: LexicalTask[] = ['synonyms', 'antonyms', 'homonyms', 'rhymes'];
 const CONTEXTS = [
   'neutral',
   'hopeful',
@@ -37,29 +36,54 @@ const CONTEXTS = [
   'formal',
 ];
 
-const TOOL_LABELS: Record<ToolTab, string> = {
-  synonyms: 'Synonyms',
-  antonyms: 'Antonyms',
-  homonyms: 'Homonyms',
-  rhymes: 'Rhymes',
-  smart_match: 'Smart Match',
-  one_word: 'One-Word',
+const TASK_TAGS: Record<LexicalTask, string> = {
+  synonyms: 'SYN',
+  antonyms: 'ANT',
+  rhymes: 'RHYME',
+  homonyms: 'HOMOPHONE',
 };
 
-const isLexicalTool = (task: ToolTab): task is LexicalTask => {
-  return LEXICAL_TASKS.includes(task as LexicalTask);
+const TOOL_META: Record<ToolTab, { title: string; help: string }> = {
+  one_word: {
+    title: 'One-Word Substitution',
+    help: 'Describe the word you want. We will suggest ranked single-word options.',
+  },
+  smart_match: {
+    title: 'Smart Match',
+    help: 'Combine rhyme and synonym or antonym constraints in one query.',
+  },
+  synonyms: {
+    title: 'Synonyms & Antonyms',
+    help: 'Enter a word, then choose lexical contrast direction.',
+  },
+  rhymes: {
+    title: 'Rhyme & Homonym',
+    help: 'Find phonetic matches and practical homophone variants.',
+  },
 };
 
 const formatLabel = (value: string) =>
   value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Neutral';
 
+const fallbackCopy = (value: string) => {
+  const textArea = document.createElement('textarea');
+  textArea.value = value;
+  textArea.style.position = 'fixed';
+  textArea.style.opacity = '0';
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  document.execCommand('copy');
+  document.body.removeChild(textArea);
+};
+
 const ToolsPanel = ({
   isOpen = false,
   onClose = () => {},
   selection,
-  onInsertWord,
   isAuthenticated = false,
   context = 'neutral',
+  onContextChange,
   embedded = false,
   activeTool: controlledTool,
   onActiveToolChange,
@@ -67,42 +91,47 @@ const ToolsPanel = ({
   const [internalActiveTool, setInternalActiveTool] = useState<ToolTab>(
     controlledTool ?? 'one_word',
   );
-  const [toolWord, setToolWord] = useState('');
+  const [copiedWord, setCopiedWord] = useState('');
+
+  const [contrastTask, setContrastTask] = useState<'synonyms' | 'antonyms'>('synonyms');
+  const [soundTask, setSoundTask] = useState<'rhymes' | 'homonyms'>('rhymes');
+  const [lexicalInput, setLexicalInput] = useState('');
   const [toolResults, setToolResults] = useState<string[]>([]);
-  const [toolResultDetails, setToolResultDetails] = useState<Record<string, LexicalResultDetail>>({});
-  const [loading, setLoading] = useState(false);
+  const [toolResultDetails, setToolResultDetails] = useState<Record<string, LexicalResultDetail>>(
+    {},
+  );
+  const [loadingLexical, setLoadingLexical] = useState(false);
+  const [lexicalSearched, setLexicalSearched] = useState(false);
+  const [lexicalError, setLexicalError] = useState('');
 
   const [rhymeWith, setRhymeWith] = useState('');
   const [meaningOf, setMeaningOf] = useState('');
   const [relation, setRelation] = useState<ConstraintRelation>('synonym');
   const [smartResults, setSmartResults] = useState<ConstraintResult[]>([]);
-  const [smartNote, setSmartNote] = useState<string>('');
+  const [smartNote, setSmartNote] = useState('');
   const [smartLoading, setSmartLoading] = useState(false);
+  const [smartSearched, setSmartSearched] = useState(false);
 
   const [oneWordQuery, setOneWordQuery] = useState('');
   const [oneWordContext, setOneWordContext] = useState('global');
   const [oneWordResults, setOneWordResults] = useState<OneWordResult[]>([]);
   const [oneWordNote, setOneWordNote] = useState('');
   const [oneWordLoading, setOneWordLoading] = useState(false);
+  const [oneWordSearched, setOneWordSearched] = useState(false);
 
   const selectionWord = selection?.text?.split(/\s+/)[0] || '';
-  const activeWord = toolWord.trim() || selectionWord;
-  const selectedOneWordContext = oneWordContext === 'global' ? context : oneWordContext;
-  const toolTasks: ToolTab[] = [...LEXICAL_TASKS, 'smart_match', 'one_word'];
   const activeTool = controlledTool ?? internalActiveTool;
+  const selectedOneWordContext = oneWordContext === 'global' ? context : oneWordContext;
   const isVisible = embedded || isOpen;
 
-  useEffect(() => {
-    if (!isVisible) {
-      return;
-    }
-    setToolResults([]);
-    setToolResultDetails({});
-    setSmartResults([]);
-    setSmartNote('');
-    setOneWordResults([]);
-    setOneWordNote('');
-  }, [isVisible]);
+  const activeLexicalTask = useMemo<LexicalTask | null>(() => {
+    if (activeTool === 'synonyms') return contrastTask;
+    if (activeTool === 'rhymes') return soundTask;
+    return null;
+  }, [activeTool, contrastTask, soundTask]);
+
+  const activeLexicalWord = lexicalInput.trim() || selectionWord;
+  const toolMeta = TOOL_META[activeTool];
 
   useEffect(() => {
     if (controlledTool) {
@@ -111,46 +140,73 @@ const ToolsPanel = ({
   }, [controlledTool]);
 
   useEffect(() => {
-    let isActive = true;
-    const run = async () => {
-      if (!isVisible || !isLexicalTool(activeTool)) {
-        return;
+    if (!isVisible) return;
+    setToolResults([]);
+    setToolResultDetails({});
+    setLexicalSearched(false);
+    setLexicalError('');
+    setSmartResults([]);
+    setSmartSearched(false);
+    setSmartNote('');
+    setOneWordResults([]);
+    setOneWordSearched(false);
+    setOneWordNote('');
+  }, [activeTool, isVisible]);
+
+  const handleToolSelect = (task: ToolTab) => {
+    if (!controlledTool) {
+      setInternalActiveTool(task);
+    }
+    onActiveToolChange?.(task);
+  };
+
+  const handleCopyWord = async (word: string) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(word);
+      } else {
+        fallbackCopy(word);
       }
-      if (!activeWord) {
-        setToolResults([]);
-        return;
+      setCopiedWord(word);
+      window.setTimeout(() => setCopiedWord((current) => (current === word ? '' : current)), 1200);
+    } catch (error) {
+      fallbackCopy(word);
+      setCopiedWord(word);
+      window.setTimeout(() => setCopiedWord((current) => (current === word ? '' : current)), 1200);
+    }
+  };
+
+  const runLexicalSearch = async () => {
+    setLexicalSearched(true);
+    setLexicalError('');
+    if (!activeLexicalTask || !activeLexicalWord) {
+      setToolResults([]);
+      setToolResultDetails({});
+      return;
+    }
+    setLoadingLexical(true);
+    try {
+      const response = await lexicalAPI.getResults(activeLexicalWord, activeLexicalTask, context);
+      setToolResults(response.results || []);
+      const detailsMap: Record<string, LexicalResultDetail> = {};
+      for (const detail of response.details || []) {
+        detailsMap[detail.word] = detail;
       }
-      setLoading(true);
-      try {
-        const response = await lexicalAPI.getResults(activeWord, activeTool, context);
-        if (isActive) {
-          setToolResults(response.results || []);
-          const detailsMap: Record<string, LexicalResultDetail> = {};
-          for (const item of response.details || []) {
-            detailsMap[item.word] = item;
-          }
-          setToolResultDetails(detailsMap);
-        }
-      } catch (error) {
-        if (isActive) {
-          setToolResults([]);
-          setToolResultDetails({});
-        }
-      } finally {
-        if (isActive) {
-          setLoading(false);
-        }
-      }
-    };
-    void run();
-    return () => {
-      isActive = false;
-    };
-  }, [activeTool, activeWord, isVisible]);
+      setToolResultDetails(detailsMap);
+    } catch (error) {
+      setToolResults([]);
+      setToolResultDetails({});
+      setLexicalError('Unable to fetch lexical suggestions right now.');
+    } finally {
+      setLoadingLexical(false);
+    }
+  };
 
   const handleSmartMatch = async () => {
+    setSmartSearched(true);
     if (!rhymeWith.trim() || !meaningOf.trim()) {
       setSmartResults([]);
+      setSmartNote('Enter both fields to run Smart Match.');
       return;
     }
     setSmartLoading(true);
@@ -173,6 +229,7 @@ const ToolsPanel = ({
   };
 
   const handleFindOneWord = async () => {
+    setOneWordSearched(true);
     if (!oneWordQuery.trim()) {
       setOneWordResults([]);
       setOneWordNote('Describe the word you want to find.');
@@ -195,6 +252,21 @@ const ToolsPanel = ({
     }
   };
 
+  const handleSaveLexical = async (word: string) => {
+    if (!isAuthenticated || !activeLexicalTask) return;
+    try {
+      await favoritesAPI.saveFavorite({
+        word,
+        source: 'lexical',
+        type: activeLexicalTask,
+        context,
+        related_to: activeLexicalWord,
+      });
+    } catch (error) {
+      console.error('Error saving lexical word:', error);
+    }
+  };
+
   const handleSaveSmart = async (word: string) => {
     if (!isAuthenticated) return;
     try {
@@ -207,21 +279,6 @@ const ToolsPanel = ({
       });
     } catch (error) {
       console.error('Error saving smart match word:', error);
-    }
-  };
-
-  const handleSaveLexical = async (word: string) => {
-    if (!isAuthenticated || !isLexicalTool(activeTool)) return;
-    try {
-      await favoritesAPI.saveFavorite({
-        word,
-        source: 'lexical',
-        type: activeTool,
-        context,
-        related_to: activeWord,
-      });
-    } catch (error) {
-      console.error('Error saving lexical word:', error);
     }
   };
 
@@ -240,118 +297,179 @@ const ToolsPanel = ({
     }
   };
 
-  const resetResults = () => {
-    setToolResults([]);
-    setToolResultDetails({});
-    setSmartResults([]);
-    setSmartNote('');
-    setOneWordResults([]);
-    setOneWordNote('');
-    setLoading(false);
-  };
-
-  const handleToolSelect = (task: ToolTab) => {
-    if (!controlledTool) {
-      setInternalActiveTool(task);
-    }
-    if (onActiveToolChange) {
-      onActiveToolChange(task);
-    }
-    resetResults();
-  };
+  const renderActions = (word: string, onSave: (value: string) => void) => (
+    <div className="tool-result-actions">
+      <button type="button" className="btn-accept" onClick={() => handleCopyWord(word)}>
+        {copiedWord === word ? 'Copied' : 'Copy'}
+      </button>
+      {isAuthenticated && (
+        <button type="button" className="btn-ghost" onClick={() => onSave(word)}>
+          Save
+        </button>
+      )}
+    </div>
+  );
 
   const panelBody = (
     <>
-      <div className="panel-header">
-        <h2 className="panel-title">Tools</h2>
-        {!embedded && (
+      {!embedded && (
+        <div className="panel-header">
+          <h2 className="panel-title">Tools</h2>
           <button onClick={onClose} className="panel-close" type="button">
             ×
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="panel-body">
-        <div className="tools-section">
-          <div className="tools-header">Lexical Tools</div>
-          <div className="tools-chips">
-            {toolTasks.map((task) => (
+        {!embedded && (
+          <div className="tool-inline-nav">
+            {(['one_word', 'smart_match', 'synonyms', 'rhymes'] as ToolTab[]).map((task) => (
               <button
                 key={task}
+                type="button"
                 className={`tool-chip ${activeTool === task ? 'is-active' : ''}`}
                 onClick={() => handleToolSelect(task)}
               >
-                {TOOL_LABELS[task]}
+                {TOOL_META[task].title}
               </button>
             ))}
           </div>
+        )}
 
-          {isLexicalTool(activeTool) && (
-            <>
-              <div className="tools-input">
-                <input
-                  value={toolWord}
-                  onChange={(event) => setToolWord(event.target.value)}
-                  placeholder={
-                    selectionWord ? `Using selection: ${selectionWord}` : 'Type a word'
-                  }
-                />
-              </div>
-              <div className="tools-results">
-                {loading ? (
-                  <p className="panel-muted">Fetching {activeTool}…</p>
-                ) : !activeWord ? (
-                  <p className="panel-muted">Select or type a word to use tools.</p>
-                ) : toolResults.length === 0 ? (
-                  <p className="panel-muted">No results found.</p>
-                ) : (
-                  <div className="tools-result-grid">
-                    {toolResults.map((result) => (
-                      <div key={result} className="tools-result-row">
-                        <div className="tools-result-detail">
-                          <button
-                            onClick={() => onInsertWord(result)}
-                            className="tools-result-chip"
-                          >
-                            {result}
-                          </button>
-                          {toolResultDetails[result]?.reason && (
-                            <p className="tools-result-note">
-                              {toolResultDetails[result]?.reason}
-                            </p>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          className="btn-ghost"
-                          disabled={!isAuthenticated}
-                          title={
-                            isAuthenticated ? 'Save word' : 'Login to save your writing'
-                          }
-                          onClick={() => handleSaveLexical(result)}
-                        >
-                          Save
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </>
+        <div className="tool-panel-head">
+          <div>
+            <h2 className="tool-panel-title">{toolMeta.title}</h2>
+            <p className="tool-panel-help">{toolMeta.help}</p>
+          </div>
+          {onContextChange && (
+            <label className="tool-context-field">
+              Tone / Context
+              <select value={context} onChange={(event) => onContextChange(event.target.value)}>
+                {CONTEXTS.map((ctx) => (
+                  <option key={ctx} value={ctx}>
+                    {formatLabel(ctx)}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
+        </div>
 
-          {activeTool === 'smart_match' && (
-            <div className="smart-match">
-              <div className="smart-row">
-                <label>Rhyme with</label>
+        {activeTool === 'synonyms' || activeTool === 'rhymes' ? (
+          <div className="tool-workspace">
+            <div className="tool-toggle-row">
+              {activeTool === 'synonyms' ? (
+                <>
+                  <button
+                    type="button"
+                    className={`tool-toggle ${contrastTask === 'synonyms' ? 'is-active' : ''}`}
+                    onClick={() => setContrastTask('synonyms')}
+                  >
+                    Synonyms
+                  </button>
+                  <button
+                    type="button"
+                    className={`tool-toggle ${contrastTask === 'antonyms' ? 'is-active' : ''}`}
+                    onClick={() => setContrastTask('antonyms')}
+                  >
+                    Antonyms
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className={`tool-toggle ${soundTask === 'rhymes' ? 'is-active' : ''}`}
+                    onClick={() => setSoundTask('rhymes')}
+                  >
+                    Rhymes
+                  </button>
+                  <button
+                    type="button"
+                    className={`tool-toggle ${soundTask === 'homonyms' ? 'is-active' : ''}`}
+                    onClick={() => setSoundTask('homonyms')}
+                  >
+                    Homophones
+                  </button>
+                </>
+              )}
+            </div>
+
+            <div className="tool-hero-input">
+              <input
+                value={lexicalInput}
+                onChange={(event) => setLexicalInput(event.target.value)}
+                placeholder={
+                  activeTool === 'synonyms'
+                    ? 'Enter a word to explore lexical contrast...'
+                    : 'Enter a word to find rhymes or homophones...'
+                }
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    void runLexicalSearch();
+                  }
+                }}
+              />
+            </div>
+
+            <div className="tool-action-row">
+              <button type="button" className="btn-accept" onClick={() => void runLexicalSearch()}>
+                {contrastTask === 'antonyms'
+                  ? 'Get antonyms'
+                  : soundTask === 'homonyms'
+                    ? 'Get homophones'
+                    : activeTool === 'rhymes'
+                      ? 'Get rhymes'
+                      : 'Get synonyms'}
+              </button>
+            </div>
+
+            <div className="tool-results-list">
+              {loadingLexical ? (
+                <p className="panel-muted">Looking up results...</p>
+              ) : !lexicalSearched ? (
+                <p className="panel-muted">Type a word to see results.</p>
+              ) : lexicalError ? (
+                <p className="panel-muted">{lexicalError}</p>
+              ) : toolResults.length === 0 ? (
+                <p className="panel-muted">No results found for this query.</p>
+              ) : (
+                toolResults.map((result) => {
+                  const detail = toolResultDetails[result];
+                  return (
+                    <article key={result} className="tool-result-card">
+                      <div className="tool-result-head">
+                        <h3 className="tool-result-word">{result}</h3>
+                        <span className="tool-result-tag">
+                          {detail?.pos?.toUpperCase() || (activeLexicalTask ? TASK_TAGS[activeLexicalTask] : 'LEX')}
+                        </span>
+                      </div>
+                      <p className="tool-result-reason">
+                        {detail?.reason || 'Semantically related lexical match.'}
+                      </p>
+                      {renderActions(result, handleSaveLexical)}
+                    </article>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {activeTool === 'smart_match' ? (
+          <div className="tool-workspace">
+            <div className="tool-input-grid">
+              <label className="tool-field">
+                Rhyme with
                 <input
                   value={rhymeWith}
                   onChange={(event) => setRhymeWith(event.target.value)}
-                  placeholder="night"
+                  placeholder="e.g., night"
                 />
-              </div>
-              <div className="smart-row">
-                <label>Relation</label>
+              </label>
+              <label className="tool-field">
+                Relation
                 <select
                   value={relation}
                   onChange={(event) => setRelation(event.target.value as ConstraintRelation)}
@@ -359,141 +477,118 @@ const ToolsPanel = ({
                   <option value="synonym">Synonym</option>
                   <option value="antonym">Antonym</option>
                 </select>
-              </div>
-              <div className="smart-row">
-                <label>Meaning of</label>
+              </label>
+              <label className="tool-field tool-field-wide">
+                Meaning target
                 <input
                   value={meaningOf}
                   onChange={(event) => setMeaningOf(event.target.value)}
-                  placeholder="bright"
+                  placeholder="e.g., bright"
                 />
-              </div>
-              <button type="button" className="btn-accept" onClick={handleSmartMatch}>
-                Find words
-              </button>
-
-              <div className="tools-results">
-                {smartLoading ? (
-                  <p className="panel-muted">Finding smart matches…</p>
-                ) : smartResults.length === 0 ? (
-                  <p className="panel-muted">{smartNote || 'Enter both words to see results.'}</p>
-                ) : (
-                  <>
-                    {smartNote && <p className="panel-muted">{smartNote}</p>}
-                    <div className="smart-results">
-                      {smartResults.map((result) => (
-                        <div key={result.word} className="smart-result-card">
-                          <div className="smart-result-header">
-                            <span className="smart-word">{result.word}</span>
-                            <span className="smart-score">{result.score.toFixed(2)}</span>
-                          </div>
-                          <p className="smart-reason">{result.reason}</p>
-                          <div className="smart-actions">
-                            <button
-                              type="button"
-                              className="btn-accept"
-                              onClick={() => onInsertWord(result.word)}
-                            >
-                              Insert
-                            </button>
-                            <button
-                              type="button"
-                              className="btn-ghost"
-                              disabled={!isAuthenticated}
-                              title={
-                                isAuthenticated ? 'Save word' : 'Login to save your writing'
-                              }
-                              onClick={() => handleSaveSmart(result.word)}
-                            >
-                              Save
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
+              </label>
             </div>
-          )}
 
-          {activeTool === 'one_word' && (
-            <div className="smart-match">
-              <div className="smart-row">
-                <label>Describe the word you want</label>
+            <div className="tool-action-row">
+              <button type="button" className="btn-accept" onClick={() => void handleSmartMatch()}>
+                Find matches
+              </button>
+            </div>
+
+            <div className="tool-results-list">
+              {smartLoading ? (
+                <p className="panel-muted">Finding smart matches...</p>
+              ) : !smartSearched ? (
+                <p className="panel-muted">Type a word to see results.</p>
+              ) : smartResults.length === 0 ? (
+                <p className="panel-muted">{smartNote || 'No compatible matches found yet.'}</p>
+              ) : (
+                <>
+                  {smartNote && <p className="panel-muted">{smartNote}</p>}
+                  {smartResults.map((result) => (
+                    <article key={result.word} className="tool-result-card">
+                      <div className="tool-result-head">
+                        <h3 className="tool-result-word">{result.word}</h3>
+                        <span className="tool-result-tag">SMART</span>
+                      </div>
+                      <p className="tool-result-reason">{result.reason}</p>
+                      {renderActions(result.word, handleSaveSmart)}
+                    </article>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {activeTool === 'one_word' ? (
+          <div className="tool-workspace">
+            <div className="tool-input-grid">
+              <label className="tool-field tool-field-wide">
+                Describe the word you want
                 <input
                   value={oneWordQuery}
                   onChange={(event) => setOneWordQuery(event.target.value)}
-                  placeholder="a person who loves themselves too much"
+                  placeholder="e.g., self obsessed, fear of heights..."
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      void handleFindOneWord();
+                    }
+                  }}
                 />
-              </div>
-
-              <div className="smart-row">
-                <label>Tone / context (optional)</label>
+              </label>
+              <label className="tool-field">
+                Context source
                 <select
                   value={oneWordContext}
                   onChange={(event) => setOneWordContext(event.target.value)}
                 >
-                  <option value="global">Use global ({formatLabel(context)})</option>
+                  <option value="global">Use selected tone ({formatLabel(context)})</option>
                   {CONTEXTS.map((ctx) => (
                     <option key={ctx} value={ctx}>
                       {formatLabel(ctx)}
                     </option>
                   ))}
                 </select>
-              </div>
+              </label>
+            </div>
 
-              <button type="button" className="btn-accept" onClick={handleFindOneWord}>
+            <div className="tool-action-row">
+              <button type="button" className="btn-accept" onClick={() => void handleFindOneWord()}>
                 Find one word
               </button>
-
-              <div className="tools-results">
-                {oneWordLoading ? (
-                  <p className="panel-muted">Finding one-word substitutions…</p>
-                ) : oneWordResults.length === 0 ? (
-                  <p className="panel-muted">
-                    {oneWordNote || 'Describe a phrase to generate one-word results.'}
-                  </p>
-                ) : (
-                  <>
-                    {oneWordNote && <p className="panel-muted">{oneWordNote}</p>}
-                    <div className="smart-results">
-                      {oneWordResults.map((result) => (
-                        <div key={result.word} className="smart-result-card">
-                          <div className="smart-result-header">
-                            <span className="smart-word">{result.word}</span>
-                            <span className="smart-score">{result.score.toFixed(2)}</span>
-                          </div>
-                          <p className="smart-reason">{result.meaning || result.reason}</p>
-                          <div className="smart-actions">
-                            <button
-                              type="button"
-                              className="btn-accept"
-                              onClick={() => onInsertWord(result.word)}
-                            >
-                              Insert
-                            </button>
-                            <button
-                              type="button"
-                              className="btn-ghost"
-                              disabled={!isAuthenticated}
-                              title={
-                                isAuthenticated ? 'Save word' : 'Login to save your writing'
-                              }
-                              onClick={() => handleSaveOneWord(result.word)}
-                            >
-                              Save
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
             </div>
-          )}
-        </div>
+
+            <div className="tool-results-list">
+              {oneWordLoading ? (
+                <p className="panel-muted">Finding one-word substitutions...</p>
+              ) : !oneWordSearched ? (
+                <p className="panel-muted">Type a word to see results.</p>
+              ) : oneWordResults.length === 0 ? (
+                <p className="panel-muted">
+                  {oneWordNote || 'No one-word substitutions found for that description.'}
+                </p>
+              ) : (
+                <>
+                  {oneWordNote && <p className="panel-muted">{oneWordNote}</p>}
+                  {oneWordResults.map((result) => (
+                    <article key={result.word} className="tool-result-card">
+                      <div className="tool-result-head">
+                        <h3 className="tool-result-word">{result.word}</h3>
+                        <span className="tool-result-tag">ONE-WORD</span>
+                      </div>
+                      <p className="tool-result-reason">{result.meaning || result.reason}</p>
+                      {renderActions(result.word, handleSaveOneWord)}
+                    </article>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {!isAuthenticated && (
+          <p className="panel-muted tool-auth-hint">Login to save words to your vocabulary.</p>
+        )}
       </div>
     </>
   );

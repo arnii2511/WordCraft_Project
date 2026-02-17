@@ -66,7 +66,7 @@ const TopBar = ({
   return (
     <header className="topbar">
       <div className="topbar-left">
-        <h1 className="topbar-title">The Craft of Writing</h1>
+        <h1 className="topbar-title">WordCraft</h1>
       </div>
 
       <div className="topbar-center">

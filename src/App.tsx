@@ -117,7 +117,6 @@ function App() {
 
       <footer className="app-footer">
         <span>WordCraft © 2026</span>
-        <span>Tools-first writing workflow with deep editor mode.</span>
       </footer>
     </div>
   );

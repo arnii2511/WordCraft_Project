@@ -12,19 +12,6 @@ interface ToolsHomeProps {
   onLogout: () => void;
 }
 
-const CONTEXTS = [
-  'neutral',
-  'hopeful',
-  'horror',
-  'nostalgia',
-  'academic',
-  'romantic',
-  'joyful',
-  'melancholic',
-  'mysterious',
-  'formal',
-];
-
 const TOOL_CARDS: Array<{
   id: ToolTab;
   title: string;
@@ -57,9 +44,6 @@ const TOOL_CARDS: Array<{
   },
 ];
 
-const formatLabel = (value: string) =>
-  value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Neutral';
-
 const ToolsHome = ({
   context,
   setContext,
@@ -71,33 +55,11 @@ const ToolsHome = ({
   const navigate = useNavigate();
   const [activeTool, setActiveTool] = useState<ToolTab>('one_word');
 
-  const handleInsertFromHome = (word: string) => {
-    localStorage.setItem('wordcraft_pending_insert', word);
-    navigate('/editor');
-  };
-
   return (
     <div className="tools-home-shell">
-      <header className="tools-home-header">
-        <div className="tools-home-copy">
-          <p className="tools-home-kicker">WordCraft USP</p>
-          <h1>Tools-first writing intelligence.</h1>
-          <p>
-            Run one-word substitutions, smart multi-constraint matches, and lexical
-            searches before you enter deep writing mode.
-          </p>
-        </div>
-        <div className="tools-home-actions">
-          <label className="tools-home-context">
-            Tone
-            <select value={context} onChange={(event) => setContext(event.target.value)}>
-              {CONTEXTS.map((ctx) => (
-                <option key={ctx} value={ctx}>
-                  {formatLabel(ctx)}
-                </option>
-              ))}
-            </select>
-          </label>
+      <header className="tools-home-topbar">
+        <h1 className="tools-home-brand">WordCraft</h1>
+        <div className="tools-home-top-actions">
           <button type="button" className="btn-outline" onClick={() => navigate('/editor')}>
             Start Writing
           </button>
@@ -112,6 +74,13 @@ const ToolsHome = ({
           )}
         </div>
       </header>
+
+      <section className="tools-home-hero">
+        <h2>Find the exact word, fast.</h2>
+        <p>
+          One-word substitutions, smart matches, rhymes, and lexical contrasts.
+        </p>
+      </section>
 
       <section className="tool-home-grid">
         {TOOL_CARDS.map((card) => (
@@ -133,18 +102,17 @@ const ToolsHome = ({
           embedded
           activeTool={activeTool}
           onActiveToolChange={setActiveTool}
-          onInsertWord={handleInsertFromHome}
           isAuthenticated={isAuthenticated}
           context={context}
+          onContextChange={setContext}
         />
       </section>
 
-      <div className="tools-home-footer">
-        <span>Insert from Tools opens `/editor` and places the word in your draft.</span>
-        <button type="button" className="btn-accept" onClick={() => navigate('/editor')}>
-          Start Writing
-        </button>
-      </div>
+      <section className="tools-home-how">
+        <div className="tools-home-how-item">Understands context</div>
+        <div className="tools-home-how-item">Matches grammar</div>
+        <div className="tools-home-how-item">Explains suggestions</div>
+      </section>
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Editor as TipTapEditor } from '@tiptap/react';
 import { documentsAPI } from '../services/api';
 import TopBar from '../components/TopBar';
@@ -8,7 +8,6 @@ import SuggestionSidebar from '../components/SuggestionSidebar';
 import DocumentsPanel from '../components/DocumentsPanel';
 import FavoritesPanel from '../components/FavoritesPanel';
 import HistoryPanel from '../components/HistoryPanel';
-import ToolsPanel from '../components/tools/ToolsPanel';
 import type { DocumentEntry, SelectionPayload, SuggestResponse, UserProfile } from '../types';
 
 const PENDING_INSERT_KEY = 'wordcraft_pending_insert';
@@ -48,8 +47,8 @@ const EditorPage = ({
   const [rewriteSignal, setRewriteSignal] = useState(0);
   const [selection, setSelection] = useState<SelectionPayload | null>(null);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
-  const [showTools, setShowTools] = useState(false);
   const editorRef = useRef<TipTapEditor | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const storedDocId = localStorage.getItem('active_document_id');
@@ -130,7 +129,7 @@ const EditorPage = ({
         onLogout={onLogout}
         onLogin={onRequireAuth}
         onSave={handleSave}
-        onToggleTools={() => setShowTools((prev) => !prev)}
+        onToggleTools={() => navigate('/')}
         onOpenHistory={() => {
           if (!isAuthenticated) {
             onRequireAuth();
@@ -153,13 +152,6 @@ const EditorPage = ({
           setShowDocs((prev) => !prev);
         }}
       />
-
-      <div className="editor-route-banner">
-        <Link to="/" className="editor-route-link">
-          Back to Tools Home
-        </Link>
-        <span className="editor-route-note">Deep Writing Mode</span>
-      </div>
 
       <div className="app-main">
         <Editor
@@ -228,15 +220,6 @@ const EditorPage = ({
         onInsertFavorite={(content) => {
           handleInsertWord(content);
         }}
-      />
-
-      <ToolsPanel
-        isOpen={showTools}
-        onClose={() => setShowTools(false)}
-        selection={selection}
-        onInsertWord={handleInsertWord}
-        isAuthenticated={isAuthenticated}
-        context={context}
       />
     </div>
   );
