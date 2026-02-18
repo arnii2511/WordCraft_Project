@@ -113,7 +113,6 @@ const ToolsPanel = ({
   const [smartSearched, setSmartSearched] = useState(false);
 
   const [oneWordQuery, setOneWordQuery] = useState('');
-  const [oneWordContext, setOneWordContext] = useState('global');
   const [oneWordResults, setOneWordResults] = useState<OneWordResult[]>([]);
   const [oneWordNote, setOneWordNote] = useState('');
   const [oneWordLoading, setOneWordLoading] = useState(false);
@@ -121,7 +120,6 @@ const ToolsPanel = ({
 
   const selectionWord = selection?.text?.split(/\s+/)[0] || '';
   const activeTool = controlledTool ?? internalActiveTool;
-  const selectedOneWordContext = oneWordContext === 'global' ? context : oneWordContext;
   const isVisible = embedded || isOpen;
 
   const activeLexicalTask = useMemo<LexicalTask | null>(() => {
@@ -239,7 +237,7 @@ const ToolsPanel = ({
     try {
       const response = await onewordAPI.getResults({
         query: oneWordQuery.trim(),
-        context: selectedOneWordContext,
+        context,
         limit: 10,
       });
       setOneWordResults(response.results || []);
@@ -289,7 +287,7 @@ const ToolsPanel = ({
         word,
         source: 'oneword',
         type: 'oneword',
-        context: selectedOneWordContext,
+        context,
         related_to: oneWordQuery.trim(),
       });
     } catch (error) {
@@ -535,20 +533,6 @@ const ToolsPanel = ({
                     }
                   }}
                 />
-              </label>
-              <label className="tool-field">
-                Context source
-                <select
-                  value={oneWordContext}
-                  onChange={(event) => setOneWordContext(event.target.value)}
-                >
-                  <option value="global">Use selected tone ({formatLabel(context)})</option>
-                  {CONTEXTS.map((ctx) => (
-                    <option key={ctx} value={ctx}>
-                      {formatLabel(ctx)}
-                    </option>
-                  ))}
-                </select>
               </label>
             </div>
 

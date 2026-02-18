@@ -4,6 +4,7 @@ import { authAPI } from './services/api';
 import { clearAllSnapshots } from './services/sessionHistory';
 import Login from './components/Login';
 import EditorPage from './pages/EditorPage';
+import ProfilePage from './pages/ProfilePage';
 import ToolsHome from './pages/ToolsHome';
 import type { AuthResponse, UserProfile } from './types';
 
@@ -50,6 +51,10 @@ function App() {
     localStorage.removeItem('active_document_id');
   };
 
+  const handleUserUpdate = (profile: UserProfile) => {
+    setUser(profile);
+  };
+
   return (
     <div className="app-shell">
       {showAuth && (
@@ -93,7 +98,6 @@ function App() {
               isAuthenticated={isAuthenticated}
               user={user}
               onRequireAuth={() => setShowAuth(true)}
-              onLogout={handleLogout}
             />
           }
         />
@@ -110,6 +114,22 @@ function App() {
               onLogout={handleLogout}
               onRequireAuth={() => setShowAuth(true)}
             />
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            isAuthenticated ? (
+              <ProfilePage
+                user={user}
+                isAuthenticated={isAuthenticated}
+                onRequireAuth={() => setShowAuth(true)}
+                onLogout={handleLogout}
+                onUserUpdate={handleUserUpdate}
+              />
+            ) : (
+              <Navigate to="/" replace />
+            )
           }
         />
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -16,6 +16,7 @@ interface SuggestionSidebarProps {
   isAuthenticated: boolean;
   selection?: SelectionPayload | null;
   context?: string;
+  onContextChange?: (value: string) => void;
 }
 
 const SuggestionSidebar = ({
@@ -32,9 +33,22 @@ const SuggestionSidebar = ({
   isAuthenticated,
   selection,
   context = 'neutral',
+  onContextChange = () => {},
 }: SuggestionSidebarProps) => {
   const [savedWords, setSavedWords] = useState<string[]>([]);
   const [savedRewrites, setSavedRewrites] = useState<string[]>([]);
+  const contexts = [
+    'neutral',
+    'hopeful',
+    'horror',
+    'nostalgia',
+    'academic',
+    'romantic',
+    'joyful',
+    'melancholic',
+    'mysterious',
+    'formal',
+  ];
 
   const topWord = suggestions[0]?.word || '';
   const selectionWord = selection?.text?.split(/\s+/)[0] || '';
@@ -43,6 +57,16 @@ const SuggestionSidebar = ({
     if (mode === 'edit') return 'Clarity & Grammar Fixes';
     if (mode === 'rewrite') return 'Rewrite Options (Click to Generate)';
     return 'Word Ideas (Tone + Context)';
+  }, [mode]);
+
+  const panelHelp = useMemo(() => {
+    if (mode === 'edit') {
+      return 'Improves clarity and grammar while keeping your meaning.';
+    }
+    if (mode === 'rewrite') {
+      return 'Generates rewrite versions when you click.';
+    }
+    return 'Suggests words for blanks and highlights. No heavy rewriting.';
   }, [mode]);
 
   const emptyState = useMemo(() => {
@@ -112,7 +136,22 @@ const SuggestionSidebar = ({
   return (
     <aside className="right-panel">
       <div className="panel-card">
+        <label className="tool-context-field panel-context-field">
+          Tone / Context
+          <select
+            value={context}
+            onChange={(event) => onContextChange(event.target.value)}
+          >
+            {contexts.map((ctx) => (
+              <option key={ctx} value={ctx}>
+                {ctx.charAt(0).toUpperCase() + ctx.slice(1)}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <div className="panel-title">{panelTitle}</div>
+        <p className="panel-mode-help">{panelHelp}</p>
 
         {suggestions.length === 0 && !rewrite && rewrites.length === 0 && (
           <p className="panel-empty">{emptyState}</p>

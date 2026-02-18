@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Editor as TipTapEditor } from '@tiptap/react';
 import { documentsAPI } from '../services/api';
-import TopBar from '../components/TopBar';
 import Editor from '../components/Editor';
 import SuggestionSidebar from '../components/SuggestionSidebar';
 import DocumentsPanel from '../components/DocumentsPanel';
@@ -11,6 +10,27 @@ import HistoryPanel from '../components/HistoryPanel';
 import type { DocumentEntry, SelectionPayload, SuggestResponse, UserProfile } from '../types';
 
 const PENDING_INSERT_KEY = 'wordcraft_pending_insert';
+const MODE_CARDS: Array<{
+  id: 'write' | 'edit' | 'rewrite';
+  title: string;
+  subtitle: string;
+}> = [
+  {
+    id: 'write',
+    title: 'Draft',
+    subtitle: 'Light suggestions while writing',
+  },
+  {
+    id: 'edit',
+    title: 'Polish',
+    subtitle: 'Clarity and grammar refinement',
+  },
+  {
+    id: 'rewrite',
+    title: 'Transform',
+    subtitle: 'Generate rewrites on click',
+  },
+];
 
 interface EditorPageProps {
   context: string;
@@ -49,6 +69,7 @@ const EditorPage = ({
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
   const editorRef = useRef<TipTapEditor | null>(null);
   const navigate = useNavigate();
+  const profileLabel = user?.username?.trim().charAt(0).toUpperCase() || 'P';
 
   useEffect(() => {
     const storedDocId = localStorage.getItem('active_document_id');
@@ -119,67 +140,86 @@ const EditorPage = ({
 
   return (
     <div className="editor-page">
-      <TopBar
-        context={context}
-        setContext={setContext}
-        mode={mode}
-        setMode={setMode}
-        user={user}
-        isAuthenticated={isAuthenticated}
-        onLogout={onLogout}
-        onLogin={onRequireAuth}
-        onSave={handleSave}
-        onToggleTools={() => navigate('/')}
-        onOpenHistory={() => {
-          if (!isAuthenticated) {
-            onRequireAuth();
-            return;
-          }
-          setShowHistory((prev) => !prev);
-        }}
-        onOpenFavorites={() => {
-          if (!isAuthenticated) {
-            onRequireAuth();
-            return;
-          }
-          setShowFavorites((prev) => !prev);
-        }}
-        onOpenDocs={() => {
-          if (!isAuthenticated) {
-            onRequireAuth();
-            return;
-          }
-          setShowDocs((prev) => !prev);
-        }}
-      />
+      <div className="editor-shell">
+        <header className="tools-home-topbar topbar">
+          <h1 className="tools-home-brand topbar-title">WordCraft</h1>
+          <div className="tools-home-top-actions topbar-right">
+            <button type="button" className="btn-outline" onClick={() => navigate('/')}>
+              Tools
+            </button>
+            <button type="button" className="btn-outline is-active" aria-current="page">
+              Editor
+            </button>
+            {isAuthenticated ? (
+              <button
+                type="button"
+                className="profile-shortcut"
+                onClick={() => navigate('/profile')}
+                title="Open profile"
+              >
+                {profileLabel}
+              </button>
+            ) : (
+              <button type="button" className="btn-outline" onClick={onRequireAuth}>
+                Login / Register
+              </button>
+            )}
+          </div>
+        </header>
 
-      <div className="app-main">
-        <Editor
-          editorRef={editorRef}
-          context={context}
-          mode={mode}
-          onSuggestionsUpdate={setSuggestions}
-          onSelectionChange={setSelection}
-          rewriteSignal={rewriteSignal}
-          isAuthenticated={isAuthenticated}
-          documentId={activeDocumentId}
-        />
+        <section className="tools-home-hero editor-hero">
+          <h2>Write sharper, sound truer.</h2>
+          <p>Draft ideas, polish clarity, and transform tone without losing your voice.</p>
+        </section>
 
-        <SuggestionSidebar
-          suggestions={suggestions.suggestions}
-          rewrite={suggestions.rewrite}
-          rewrites={suggestions.rewrites}
-          explanation={suggestions.explanation}
-          original={suggestions.original}
-          detectedBlank={suggestions.detected_blank}
-          onInsertWord={handleInsertWord}
-          onInsertRewrite={handleInsertRewrite}
-          mode={mode}
-          onRequestRewrite={handleRewriteRequest}
-          isAuthenticated={isAuthenticated}
-          selection={selection}
-          context={context}
-        />
+        <section className="editor-workspace-panel">
+          <div className="app-main">
+            <div className="editor-main-left">
+              <section className="editor-mode-grid" aria-label="Editor modes">
+                {MODE_CARDS.map((card) => (
+                  <button
+                    key={card.id}
+                    type="button"
+                    className={`editor-mode-card ${mode === card.id ? 'is-active' : ''}`}
+                    onClick={() => setMode(card.id)}
+                  >
+                    <h2>{card.title}</h2>
+                    <p>{card.subtitle}</p>
+                  </button>
+                ))}
+              </section>
+
+              <Editor
+                editorRef={editorRef}
+                context={context}
+                mode={mode}
+                onSuggestionsUpdate={setSuggestions}
+                onSelectionChange={setSelection}
+                onSave={handleSave}
+                rewriteSignal={rewriteSignal}
+                isAuthenticated={isAuthenticated}
+                documentId={activeDocumentId}
+              />
+            </div>
+
+            <SuggestionSidebar
+              suggestions={suggestions.suggestions}
+              rewrite={suggestions.rewrite}
+              rewrites={suggestions.rewrites}
+              explanation={suggestions.explanation}
+              original={suggestions.original}
+              detectedBlank={suggestions.detected_blank}
+              onInsertWord={handleInsertWord}
+              onInsertRewrite={handleInsertRewrite}
+              mode={mode}
+              onRequestRewrite={handleRewriteRequest}
+              isAuthenticated={isAuthenticated}
+              selection={selection}
+              context={context}
+              onContextChange={setContext}
+            />
+          </div>
+        </section>
       </div>
 
       <HistoryPanel

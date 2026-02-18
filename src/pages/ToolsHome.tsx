@@ -9,7 +9,6 @@ interface ToolsHomeProps {
   isAuthenticated: boolean;
   user: UserProfile | null;
   onRequireAuth: () => void;
-  onLogout: () => void;
 }
 
 const TOOL_CARDS: Array<{
@@ -50,22 +49,30 @@ const ToolsHome = ({
   isAuthenticated,
   user,
   onRequireAuth,
-  onLogout,
 }: ToolsHomeProps) => {
   const navigate = useNavigate();
   const [activeTool, setActiveTool] = useState<ToolTab>('one_word');
+  const profileLabel = user?.username?.trim().charAt(0).toUpperCase() || 'P';
 
   return (
     <div className="tools-home-shell">
-      <header className="tools-home-topbar">
-        <h1 className="tools-home-brand">WordCraft</h1>
-        <div className="tools-home-top-actions">
+      <header className="tools-home-topbar topbar">
+        <h1 className="tools-home-brand topbar-title">WordCraft</h1>
+        <div className="tools-home-top-actions topbar-right">
+          <button type="button" className="btn-outline is-active" aria-current="page">
+            Tools
+          </button>
           <button type="button" className="btn-outline" onClick={() => navigate('/editor')}>
-            Start Writing
+            Editor
           </button>
           {isAuthenticated ? (
-            <button type="button" className="btn-outline" onClick={onLogout}>
-              Logout {user?.username ? `(${user.username})` : ''}
+            <button
+              type="button"
+              className="profile-shortcut"
+              onClick={() => navigate('/profile')}
+              title="Open profile"
+            >
+              {profileLabel}
             </button>
           ) : (
             <button type="button" className="btn-outline" onClick={onRequireAuth}>

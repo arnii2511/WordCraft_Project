@@ -8,45 +8,120 @@ interface LoginProps {
 
 const Login = ({ onSuccess }: LoginProps) => {
   const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
-  const [phone, setPhone] = useState('');
-  const [bio, setBio] = useState('');
-  const [interests, setInterests] = useState('');
+
+  const [signInEmail, setSignInEmail] = useState('');
+  const [signInPassword, setSignInPassword] = useState('');
+
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [registerUsername, setRegisterUsername] = useState('');
+  const [registerPhone, setRegisterPhone] = useState('');
+  const [registerBio, setRegisterBio] = useState('');
+  const [registerInterests, setRegisterInterests] = useState('');
+
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [showRegisterPrompt, setShowRegisterPrompt] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const emailPattern = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+  const strongPasswordPattern =
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+  const indiaPhonePattern = /^\+91\s[6-9]\d{9}$/;
+
+  const switchTab = (registerMode: boolean) => {
+    setIsRegister(registerMode);
+    setError('');
+    setSuccess('');
+    setShowRegisterPrompt(false);
+  };
+
+  const validateSignIn = (): string | null => {
+    const email = signInEmail.trim().toLowerCase();
+    if (!emailPattern.test(email)) {
+      return 'Enter a valid email address.';
+    }
+    if (!signInPassword) {
+      return 'Enter your password.';
+    }
+    return null;
+  };
+
+  const validateRegister = (): string | null => {
+    const email = registerEmail.trim().toLowerCase();
+    if (registerUsername.trim().length < 2) {
+      return 'Username must be at least 2 characters.';
+    }
+    if (!emailPattern.test(email)) {
+      return 'Enter a valid email address.';
+    }
+    if (!indiaPhonePattern.test(registerPhone.trim())) {
+      return 'Phone must be in India format: +91 9876543210.';
+    }
+    if (!strongPasswordPattern.test(registerPassword)) {
+      return 'Password must be 8+ chars with uppercase, lowercase, number, and special character.';
+    }
+    return null;
+  };
+
+  const clearRegisterForm = () => {
+    setRegisterEmail('');
+    setRegisterPassword('');
+    setRegisterUsername('');
+    setRegisterPhone('');
+    setRegisterBio('');
+    setRegisterInterests('');
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
+    setSuccess('');
+    setShowRegisterPrompt(false);
 
+    const validationError = isRegister ? validateRegister() : validateSignIn();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setLoading(true);
     try {
-      let response: AuthResponse | null = null;
       if (isRegister) {
-        response = await authAPI.register({
-          email,
-          password,
-          username,
-          phone,
-          bio,
-          interests,
+        await authAPI.register({
+          email: registerEmail.trim().toLowerCase(),
+          password: registerPassword,
+          username: registerUsername.trim(),
+          phone: registerPhone.trim(),
+          bio: registerBio.trim(),
+          interests: registerInterests.trim(),
         });
-      } else {
-        response = await authAPI.login(email, password);
+
+        clearRegisterForm();
+        setSignInEmail('');
+        setSignInPassword('');
+        setIsRegister(false);
+        setSuccess('Account created successfully. Please sign in.');
+        return;
       }
-      if (response) {
-        onSuccess(response);
-      }
+
+      const response: AuthResponse = await authAPI.login(
+        signInEmail.trim().toLowerCase(),
+        signInPassword,
+      );
+      onSuccess(response);
     } catch (err: any) {
+      const statusCode = err?.response?.status;
       const apiMessage = err?.response?.data?.detail;
-      if (apiMessage) {
+      if (!isRegister && statusCode === 404) {
+        setError(apiMessage || 'Account not found. Please register first.');
+        setShowRegisterPrompt(true);
+      } else if (apiMessage) {
         setError(apiMessage);
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Login failed');
+        setError('Authentication failed');
       }
     } finally {
       setLoading(false);
@@ -65,14 +140,14 @@ const Login = ({ onSuccess }: LoginProps) => {
           <button
             type="button"
             className={`auth-tab ${!isRegister ? 'is-active' : ''}`}
-            onClick={() => setIsRegister(false)}
+            onClick={() => switchTab(false)}
           >
             Sign In
           </button>
           <button
             type="button"
             className={`auth-tab ${isRegister ? 'is-active' : ''}`}
-            onClick={() => setIsRegister(true)}
+            onClick={() => switchTab(true)}
           >
             Register
           </button>
@@ -84,8 +159,8 @@ const Login = ({ onSuccess }: LoginProps) => {
               <label className="auth-label">Username</label>
               <input
                 type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={registerUsername}
+                onChange={(e) => setRegisterUsername(e.target.value)}
                 placeholder="yourname"
                 className="auth-input"
                 required
@@ -97,8 +172,12 @@ const Login = ({ onSuccess }: LoginProps) => {
             <label className="auth-label">Email</label>
             <input
               type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={isRegister ? registerEmail : signInEmail}
+              onChange={(e) =>
+                isRegister
+                  ? setRegisterEmail(e.target.value)
+                  : setSignInEmail(e.target.value)
+              }
               placeholder="you@example.com"
               className="auth-input"
               required
@@ -110,10 +189,11 @@ const Login = ({ onSuccess }: LoginProps) => {
               <label className="auth-label">Phone</label>
               <input
                 type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+1 555 123 4567"
+                value={registerPhone}
+                onChange={(e) => setRegisterPhone(e.target.value)}
+                placeholder="+91 9876543210"
                 className="auth-input"
+                required
               />
             </div>
           )}
@@ -122,8 +202,12 @@ const Login = ({ onSuccess }: LoginProps) => {
             <label className="auth-label">Password</label>
             <input
               type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              value={isRegister ? registerPassword : signInPassword}
+              onChange={(e) =>
+                isRegister
+                  ? setRegisterPassword(e.target.value)
+                  : setSignInPassword(e.target.value)
+              }
               placeholder="••••••••"
               className="auth-input"
               required
@@ -135,8 +219,8 @@ const Login = ({ onSuccess }: LoginProps) => {
               <div className="auth-field full">
                 <label className="auth-label">Bio</label>
                 <textarea
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
+                  value={registerBio}
+                  onChange={(e) => setRegisterBio(e.target.value)}
                   placeholder="Tell us about your writing style."
                   className="auth-textarea"
                 />
@@ -145,8 +229,8 @@ const Login = ({ onSuccess }: LoginProps) => {
                 <label className="auth-label">Interests</label>
                 <input
                   type="text"
-                  value={interests}
-                  onChange={(e) => setInterests(e.target.value)}
+                  value={registerInterests}
+                  onChange={(e) => setRegisterInterests(e.target.value)}
                   placeholder="Poetry, Fantasy, Essays"
                   className="auth-input"
                 />
@@ -155,8 +239,18 @@ const Login = ({ onSuccess }: LoginProps) => {
           )}
 
           {error && <div className="auth-error">{error}</div>}
+          {success && <div className="auth-success">{success}</div>}
 
           <div className="auth-actions">
+            {showRegisterPrompt && !isRegister && (
+              <button
+                type="button"
+                className="panel-link"
+                onClick={() => switchTab(true)}
+              >
+                Go to Register
+              </button>
+            )}
             <button type="submit" className="auth-submit" disabled={loading}>
               {loading
                 ? isRegister

@@ -11,6 +11,7 @@ interface EditorProps {
   mode: 'write' | 'edit' | 'rewrite';
   onSuggestionsUpdate: (payload: SuggestResponse) => void;
   onSelectionChange?: (selection: SelectionPayload | null) => void;
+  onSave: () => void;
   editorRef: React.MutableRefObject<Editor | null>;
   rewriteSignal: number;
   isAuthenticated: boolean;
@@ -22,6 +23,7 @@ const EditorSurface = ({
   mode,
   onSuggestionsUpdate,
   onSelectionChange,
+  onSave,
   editorRef,
   rewriteSignal,
   isAuthenticated,
@@ -219,6 +221,16 @@ const EditorSurface = ({
   return (
     <div className="editor-container">
       <div className="editor-card">
+        <div className="editor-card-head">
+          <button
+            type="button"
+            className="btn-outline"
+            onClick={onSave}
+            title={isAuthenticated ? 'Save document' : 'Login to save'}
+          >
+            Save
+          </button>
+        </div>
         <EditorContent
           editor={editor}
           className="editor-content-font"

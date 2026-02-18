@@ -52,14 +52,35 @@ export const authAPI = {
 
   register: async (payload: Record<string, string>): Promise<AuthResponse> => {
     const response = await publicApi.post<AuthResponse>('/auth/register', payload);
-    localStorage.setItem('auth_token', response.data.token);
-    storeProfile(response.data.user);
     return response.data;
   },
 
   getMe: async (): Promise<UserProfile> => {
     const response = await protectedApi.get<UserProfile>('/auth/me');
     storeProfile(response.data);
+    return response.data;
+  },
+
+  updateMe: async (payload: {
+    email?: string;
+    username?: string;
+    phone?: string;
+    bio?: string;
+    interests?: string;
+  }): Promise<UserProfile> => {
+    const response = await protectedApi.put<UserProfile>('/auth/me', payload);
+    storeProfile(response.data);
+    return response.data;
+  },
+
+  changePassword: async (payload: {
+    current_password: string;
+    new_password: string;
+  }): Promise<{ message: string }> => {
+    const response = await protectedApi.post<{ message: string }>(
+      '/auth/change-password',
+      payload,
+    );
     return response.data;
   },
 
