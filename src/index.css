@@ -1250,15 +1250,19 @@ button:focus-visible {
 
 /* Auth */
 .auth-page {
-  min-height: 100vh;
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 48px 20px;
+  padding: 32px 20px;
+  overflow-y: auto;
+  backdrop-filter: blur(4px);
   background:
-    radial-gradient(circle at top, rgba(255, 255, 255, 0.96), transparent 54%),
-    radial-gradient(circle at 18% 20%, rgba(220, 116, 88, 0.2), transparent 58%),
-    var(--paper);
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.85), transparent 54%),
+    radial-gradient(circle at 18% 20%, rgba(220, 116, 88, 0.18), transparent 58%),
+    rgba(248, 242, 235, 0.9);
 }
 
 .auth-card {

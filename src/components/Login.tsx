@@ -73,6 +73,51 @@ const Login = ({ onSuccess }: LoginProps) => {
     setRegisterInterests('');
   };
 
+  const resolveAuthError = (err: any, registerMode: boolean): string => {
+    const statusCode = err?.response?.status;
+    const apiMessage = err?.response?.data?.detail;
+
+    if (!err?.response) {
+      return 'Unable to reach the server. Please try again.';
+    }
+
+    if (statusCode === 400) {
+      return registerMode
+        ? 'Could not create account. Please check your details and try again.'
+        : 'Could not sign in with those details.';
+    }
+    if (statusCode === 401) {
+      return 'Incorrect password. Please try again.';
+    }
+    if (statusCode === 404) {
+      return registerMode
+        ? 'Registration is unavailable right now. Please try again shortly.'
+        : 'Account not found. Please register first.';
+    }
+    if (statusCode === 409) {
+      return 'This account already exists. Please sign in instead.';
+    }
+    if (statusCode >= 500) {
+      return 'Server error. Please try again in a moment.';
+    }
+
+    if (typeof apiMessage === 'string') {
+      const cleaned = apiMessage.trim();
+      if (cleaned && cleaned.toLowerCase() !== 'not found') {
+        return cleaned;
+      }
+    }
+
+    if (Array.isArray(apiMessage) && apiMessage.length > 0) {
+      const firstDetail = apiMessage[0]?.msg;
+      if (typeof firstDetail === 'string' && firstDetail.trim()) {
+        return firstDetail;
+      }
+    }
+
+    return registerMode ? 'Account creation failed.' : 'Sign in failed.';
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
@@ -112,16 +157,13 @@ const Login = ({ onSuccess }: LoginProps) => {
       onSuccess(response);
     } catch (err: any) {
       const statusCode = err?.response?.status;
-      const apiMessage = err?.response?.data?.detail;
       if (!isRegister && statusCode === 404) {
-        setError(apiMessage || 'Account not found. Please register first.');
+        setError(resolveAuthError(err, false));
         setShowRegisterPrompt(true);
-      } else if (apiMessage) {
-        setError(apiMessage);
       } else if (err instanceof Error) {
-        setError(err.message);
+        setError(resolveAuthError(err, isRegister));
       } else {
-        setError('Authentication failed');
+        setError(resolveAuthError(err, isRegister));
       }
     } finally {
       setLoading(false);
