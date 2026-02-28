@@ -5,7 +5,9 @@ import re
 import numpy as np
 
 from . import embeddings
+from .conceptnet_service import get_related_words
 from .context_loader import load_contexts
+from .ml_reranker import rerank_candidate_dicts
 from .wordnet_service import (
     estimate_frequency,
     get_derivational_forms,
@@ -94,6 +96,58 @@ def _collect_meaning(word: str, relation: str) -> set[str]:
     return results
 
 
+def _collect_semantic_expansion(base_word: str, relation: str, max_terms: int = 120) -> set[str]:
+    if not base_word:
+        return set()
+    expanded: set[str] = set()
+    frontier: list[str] = [base_word]
+    seen: set[str] = set()
+
+    while frontier and len(expanded) < max_terms:
+        term = _clean_word(frontier.pop(0))
+        if not term or term in seen:
+            continue
+        seen.add(term)
+        if is_valid_word(term):
+            expanded.add(term)
+
+        if relation == "synonym":
+            for synonym in get_synonyms_for_word(term, max_results=20):
+                cleaned = _clean_word(synonym)
+                if cleaned and cleaned not in seen:
+                    frontier.append(cleaned)
+        else:
+            for antonym in _collect_meaning(term, "antonym"):
+                cleaned = _clean_word(antonym)
+                if cleaned and cleaned not in seen:
+                    frontier.append(cleaned)
+
+        for deriv in get_derivational_forms(term, max_results=12):
+            cleaned = _clean_word(deriv)
+            if cleaned and cleaned not in seen:
+                frontier.append(cleaned)
+
+        for related in get_related_words(term, max_terms=10):
+            cleaned = _clean_word(related)
+            if cleaned and cleaned not in seen and " " not in cleaned and is_valid_word(cleaned):
+                frontier.append(cleaned)
+
+        if len(expanded) >= max_terms:
+            break
+
+    return set(list(expanded)[:max_terms])
+
+
+def _collect_rhyme_expansion(seed_terms: set[str], max_terms: int = 200) -> set[str]:
+    results: set[str] = set()
+    for term in list(seed_terms)[:40]:
+        for rhyme in _collect_rhymes(term):
+            results.add(rhyme)
+            if len(results) >= max_terms:
+                return results
+    return results
+
+
 def _semantic_similarity(word: str, target: str) -> float:
     wv = embeddings.get_word_embedding(word)
     tv = embeddings.get_word_embedding(target)
@@ -161,6 +215,9 @@ def get_constraint_matches(
 
     rhyme_candidates = _collect_rhymes(rhyme_base)
     meaning_candidates = _collect_meaning(meaning_base, relation)
+    semantic_expansion = _collect_semantic_expansion(meaning_base, relation)
+    rhyme_from_semantic = _collect_rhyme_expansion(semantic_expansion)
+    rhyme_from_relation = _collect_rhyme_expansion(meaning_candidates)
     rhyme_set = set(rhyme_candidates)
     context_words = _get_context_words(context)
 
@@ -172,22 +229,31 @@ def get_constraint_matches(
         candidate_pool = exact_matches
     else:
         best_effort = True
-        if rhyme_candidates:
-            candidate_pool = list(dict.fromkeys(rhyme_candidates + list(meaning_candidates)))
+        if rhyme_candidates or rhyme_from_semantic or rhyme_from_relation:
+            union_list = list(
+                dict.fromkeys(
+                    rhyme_candidates
+                    + list(rhyme_from_relation)
+                    + list(rhyme_from_semantic)
+                    + list(meaning_candidates)
+                    + list(semantic_expansion)
+                )
+            )
+            candidate_pool = union_list
             note = "No strict rhyme+meaning overlap. Showing best-effort ranked matches."
         else:
-            candidate_pool = list(meaning_candidates)
+            candidate_pool = list(dict.fromkeys(list(meaning_candidates) + list(semantic_expansion)))
             note = "No rhyme candidates found. Showing strongest meaning matches."
 
-    if len(candidate_pool) > 260:
-        candidate_pool = candidate_pool[:260]
+    if len(candidate_pool) > 320:
+        candidate_pool = candidate_pool[:320]
     if not candidate_pool:
         return [], "No matches found for the provided constraints."
 
     results = []
     for candidate in candidate_pool:
         rhyme_match = candidate in rhyme_set
-        relation_match = candidate in meaning_candidates
+        relation_match = candidate in meaning_candidates or candidate in semantic_expansion
         rhyme_score = _rhyme_quality(candidate, rhyme_base) if rhyme_base else 0.0
         semantic = _semantic_similarity(candidate, meaning_base) if meaning_base else 0.0
         relation_score = 1.0 if relation_match else semantic
@@ -225,7 +291,21 @@ def get_constraint_matches(
 
     results.sort(key=lambda item: (item["score"], item["relation_match"], item["rhyme"]), reverse=True)
     capped = max(1, min(10, int(limit or 10)))
-    return results[:capped], note
+    reranked = rerank_candidate_dicts(
+        task="constraints",
+        payload={
+            "rhyme_with": rhyme_base,
+            "relation": relation,
+            "meaning_of": meaning_base,
+            "context": context or "neutral",
+        },
+        candidates=results,
+        text_key="word",
+        score_key="score",
+        blend=0.72,
+        max_results=capped,
+    )
+    return reranked, note
 
 
 __all__ = ["get_constraint_matches"]

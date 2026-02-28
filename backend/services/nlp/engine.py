@@ -6,6 +6,7 @@ from typing import Any
 from . import embeddings, explanation, ranker
 from .context_loader import load_contexts
 from .emotion_service import load_lexicon
+from .ml_reranker import rerank_candidate_dicts
 from .pipeline import build_pipeline
 from .rewrite_service import is_sentence_complete, rewrite_variants
 
@@ -80,6 +81,7 @@ def generate_suggestions(
     mode: str = "write",
     selection: Any | None = None,
     trigger: str = "auto",
+    max_suggestions: int = 5,
 ) -> dict[str, Any]:
     initialize()
     if not _INITIALIZED or _CONTEXTS is None:
@@ -103,6 +105,7 @@ def generate_suggestions(
     if not pipeline.candidates:
         return _fallback_response(blank_present)
 
+    capped_suggestions = max(1, min(50, int(max_suggestions or 5)))
     ranked = ranker.rank_candidates(
         cleaned_text=cleaned_text,
         context_key=context_key,
@@ -111,11 +114,31 @@ def generate_suggestions(
         blank_present=blank_present and pipeline.decision.intent != "selection",
         emotion_scores=pipeline.emotion_scores,
         weights=_mode_weights(mode_key, pipeline.decision.intent),
-        top_k=5,
+        top_k=capped_suggestions,
         source_map=pipeline.source_map,
         strict_pos=pipeline.decision.strict_pos,
         expected_pos_override=pipeline.decision.expected_pos,
         context_words=set(_CONTEXTS.get(context_key, {}).get("words", [])),
+    )
+    task = "suggest_sentence"
+    if pipeline.decision.intent == "blank":
+        task = "suggest_blank"
+    elif pipeline.decision.intent == "selection":
+        task = "suggest_selection"
+    ranked = rerank_candidate_dicts(
+        task=task,
+        payload={
+            "sentence": raw_text,
+            "context": context_key,
+            "mode": mode_key,
+            "selection": selection,
+            "trigger": trigger,
+        },
+        candidates=ranked,
+        text_key="word",
+        score_key="score",
+        blend=0.78,
+        max_results=capped_suggestions,
     )
     top_words = [item["word"] for item in ranked]
 

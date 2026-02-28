@@ -163,6 +163,7 @@ VITE_API_URL=http://localhost:8000
 - `POST /lexical`
 - `POST /constraints`
 - `POST /oneword`
+- `POST /feedback` (ratings for suggestions/tools/rewrites)
 
 ### Protected (JWT required)
 
@@ -249,3 +250,35 @@ Automated NLP/runtime + regression test suite:
 ```bash
 python -m pytest backend/tests
 ```
+
+---
+
+## 13) Supervised dataset + reranker training (optional but recommended)
+
+This repo now includes a unified dataset/training pipeline for editor + tool quality.
+
+Files:
+- `backend/ml/data/dataset_schema.json`
+- `backend/ml/data/seed_gold.jsonl`
+- `backend/ml/DATASET_AND_TRAINING.md`
+
+Commands:
+
+```bash
+python -m backend.ml.scripts.build_dataset
+python -m backend.ml.scripts.train_reranker
+python -m backend.ml.scripts.eval_reranker
+python -m backend.ml.scripts.export_feedback_dataset --append-default
+```
+
+The builder creates labeled candidate rows for:
+- Draft/Polish/Transform suggestion tasks
+- Lexical tools
+- Smart Match constraints
+- One-word substitution
+
+Recommended loop:
+- Build a baseline dataset once and keep it as your eval baseline.
+- Collect user ratings in MongoDB Atlas (`feedback_ratings`).
+- Favorite/save and editor insert/accept actions are automatically captured as positive feedback.
+- Export/merge feedback rows only when developers decide to retrain.

@@ -56,6 +56,7 @@ Quick API smoke checks:
 - `POST /lexical` returns `results[]` and `details[]`
 - `POST /constraints` returns ranked `results[]` with `reason`
 - `POST /oneword` returns ranked `results[]` with `reason`
+- `POST /feedback` stores user rating events (1-5) for learning loops
 
 ## 5) Access model
 - Public: suggestions + lexical + smart match
@@ -66,3 +67,15 @@ Quick API smoke checks:
 ```bash
 python -m pytest backend/tests
 ```
+
+## 7) Build ML dataset + reranker (optional)
+
+```bash
+python -m backend.ml.scripts.build_dataset
+python -m backend.ml.scripts.train_reranker
+python -m backend.ml.scripts.eval_reranker
+python -m backend.ml.scripts.export_feedback_dataset --append-default
+```
+
+Reference:
+- `backend/ml/DATASET_AND_TRAINING.md`

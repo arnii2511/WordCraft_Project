@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Editor as TipTapEditor } from '@tiptap/react';
 import { documentsAPI } from '../services/api';
 import Editor from '../components/Editor';
@@ -7,6 +6,7 @@ import SuggestionSidebar from '../components/SuggestionSidebar';
 import DocumentsPanel from '../components/DocumentsPanel';
 import FavoritesPanel from '../components/FavoritesPanel';
 import HistoryPanel from '../components/HistoryPanel';
+import AppHeader from '../components/AppHeader';
 import type { DocumentEntry, SelectionPayload, SuggestResponse, UserProfile } from '../types';
 
 const PENDING_INSERT_KEY = 'wordcraft_pending_insert';
@@ -39,7 +39,6 @@ interface EditorPageProps {
   setMode: (value: 'write' | 'edit' | 'rewrite') => void;
   user: UserProfile | null;
   isAuthenticated: boolean;
-  onLogout: () => void;
   onRequireAuth: () => void;
 }
 
@@ -50,7 +49,6 @@ const EditorPage = ({
   setMode,
   user,
   isAuthenticated,
-  onLogout,
   onRequireAuth,
 }: EditorPageProps) => {
   const [suggestions, setSuggestions] = useState<SuggestResponse>({
@@ -68,8 +66,6 @@ const EditorPage = ({
   const [selection, setSelection] = useState<SelectionPayload | null>(null);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
   const editorRef = useRef<TipTapEditor | null>(null);
-  const navigate = useNavigate();
-  const profileLabel = user?.username?.trim().charAt(0).toUpperCase() || 'P';
 
   useEffect(() => {
     const storedDocId = localStorage.getItem('active_document_id');
@@ -141,31 +137,12 @@ const EditorPage = ({
   return (
     <div className="editor-page">
       <div className="editor-shell">
-        <header className="tools-home-topbar topbar">
-          <h1 className="tools-home-brand topbar-title">WordCraft</h1>
-          <div className="tools-home-top-actions topbar-right">
-            <button type="button" className="btn-outline" onClick={() => navigate('/')}>
-              Tools
-            </button>
-            <button type="button" className="btn-outline is-active" aria-current="page">
-              Editor
-            </button>
-            {isAuthenticated ? (
-              <button
-                type="button"
-                className="profile-shortcut"
-                onClick={() => navigate('/profile')}
-                title="Open profile"
-              >
-                {profileLabel}
-              </button>
-            ) : (
-              <button type="button" className="btn-outline" onClick={onRequireAuth}>
-                Login / Register
-              </button>
-            )}
-          </div>
-        </header>
+        <AppHeader
+          activePage="editor"
+          isAuthenticated={isAuthenticated}
+          user={user}
+          onRequireAuth={onRequireAuth}
+        />
 
         <section className="tools-home-hero editor-hero">
           <h2>Write sharper, sound truer.</h2>

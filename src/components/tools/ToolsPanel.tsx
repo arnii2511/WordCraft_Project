@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { constraintsAPI, favoritesAPI, lexicalAPI, onewordAPI } from '../../services/api';
+import { constraintsAPI, favoritesAPI, feedbackAPI, lexicalAPI, onewordAPI } from '../../services/api';
 import type {
   ConstraintRelation,
   ConstraintResult,
+  FeedbackTask,
   LexicalResultDetail,
   LexicalTask,
   OneWordResult,
@@ -92,6 +93,7 @@ const ToolsPanel = ({
     controlledTool ?? 'one_word',
   );
   const [copiedWord, setCopiedWord] = useState('');
+  const [ratings, setRatings] = useState<Record<string, number>>({});
 
   const [contrastTask, setContrastTask] = useState<'synonyms' | 'antonyms'>('synonyms');
   const [soundTask, setSoundTask] = useState<'rhymes' | 'homonyms'>('rhymes');
@@ -119,6 +121,13 @@ const ToolsPanel = ({
   const [oneWordSearched, setOneWordSearched] = useState(false);
 
   const selectionWord = selection?.text?.split(/\s+/)[0] || '';
+  const sessionId =
+    localStorage.getItem('wordcraft_feedback_session') ||
+    (() => {
+      const generated = `sess_${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem('wordcraft_feedback_session', generated);
+      return generated;
+    })();
   const activeTool = controlledTool ?? internalActiveTool;
   const isVisible = embedded || isOpen;
 
@@ -130,6 +139,33 @@ const ToolsPanel = ({
 
   const activeLexicalWord = lexicalInput.trim() || selectionWord;
   const toolMeta = TOOL_META[activeTool];
+
+  const submitImplicitCopy = async (
+    task: FeedbackTask,
+    candidate: string,
+    options: {
+      pos?: string;
+      model_score?: number;
+      reason?: string;
+      input_payload?: Record<string, unknown>;
+      input_text?: string;
+    } = {},
+  ) => {
+    try {
+      await feedbackAPI.submitRating({
+        task,
+        candidate,
+        rating: 4,
+        context,
+        source: 'implicit_copy',
+        session_id: sessionId,
+        reason: options.reason || 'Implicit positive feedback from copy action.',
+        ...options,
+      });
+    } catch (error) {
+      console.error('Error submitting implicit copy feedback:', error);
+    }
+  };
 
   useEffect(() => {
     if (controlledTool) {
@@ -171,6 +207,48 @@ const ToolsPanel = ({
       fallbackCopy(word);
       setCopiedWord(word);
       window.setTimeout(() => setCopiedWord((current) => (current === word ? '' : current)), 1200);
+    }
+    if (activeTool === 'one_word') {
+      const detail = oneWordResults.find((item) => item.word === word);
+      void submitImplicitCopy('oneword', word, {
+        model_score: detail?.score,
+        reason: detail?.reason || 'Copied one-word substitution result.',
+        input_payload: {
+          query: oneWordQuery.trim(),
+          context,
+        },
+        input_text: oneWordQuery.trim(),
+      });
+      return;
+    }
+    if (activeTool === 'smart_match') {
+      const detail = smartResults.find((item) => item.word === word);
+      void submitImplicitCopy('constraints', word, {
+        model_score: detail?.score,
+        reason: detail?.reason || 'Copied smart match result.',
+        input_payload: {
+          rhyme_with: rhymeWith.trim(),
+          relation,
+          meaning_of: meaningOf.trim(),
+          context,
+        },
+        input_text: `${rhymeWith.trim()}|${relation}|${meaningOf.trim()}`,
+      });
+      return;
+    }
+    if (activeLexicalTask) {
+      const detail = toolResultDetails[word];
+      void submitImplicitCopy('lexical', word, {
+        pos: detail?.pos || undefined,
+        model_score: detail?.score,
+        reason: detail?.reason || 'Copied lexical result.',
+        input_payload: {
+          word: activeLexicalWord,
+          lexical_task: activeLexicalTask,
+          context,
+        },
+        input_text: activeLexicalWord,
+      });
     }
   };
 
@@ -295,17 +373,73 @@ const ToolsPanel = ({
     }
   };
 
-  const renderActions = (word: string, onSave: (value: string) => void) => (
-    <div className="tool-result-actions">
-      <button type="button" className="btn-accept" onClick={() => handleCopyWord(word)}>
-        {copiedWord === word ? 'Copied' : 'Copy'}
-      </button>
-      {isAuthenticated && (
-        <button type="button" className="btn-ghost" onClick={() => onSave(word)}>
-          Save
+  const submitRating = async (
+    task: FeedbackTask,
+    candidate: string,
+    rating: number,
+    options: {
+      pos?: string;
+      model_score?: number;
+      reason?: string;
+      input_payload?: Record<string, unknown>;
+      input_text?: string;
+    } = {},
+  ) => {
+    try {
+      await feedbackAPI.submitRating({
+        task,
+        candidate,
+        rating,
+        context,
+        source: 'tools_ui',
+        session_id: sessionId,
+        ...options,
+      });
+    } catch (error) {
+      console.error('Error submitting tools feedback rating:', error);
+    }
+  };
+
+  const renderRating = (
+    key: string,
+    label: string,
+    activeRating: number | undefined,
+    onRate: (rating: number) => void,
+  ) => (
+    <div className="rating-row" aria-label={`Rate ${label}`}>
+      <span className="rating-label">Rate</span>
+      {[1, 2, 3, 4, 5].map((rating) => (
+        <button
+          key={`${key}-${rating}`}
+          type="button"
+          className={`rating-chip ${activeRating === rating ? 'is-active' : ''}`}
+          onClick={() => onRate(rating)}
+        >
+          {rating}
         </button>
-      )}
+      ))}
     </div>
+  );
+
+  const renderActions = (
+    word: string,
+    ratingKey: string,
+    onSave: (value: string) => void,
+    onRate: (rating: number) => void,
+  ) => (
+    <>
+      <div className="tool-result-actions">
+        <button type="button" className="btn-accept" onClick={() => handleCopyWord(word)}>
+          {copiedWord === word ? 'Copied' : 'Copy'}
+        </button>
+        {isAuthenticated && (
+          <button type="button" className="btn-ghost" onClick={() => onSave(word)}>
+            Save
+          </button>
+        )}
+      </div>
+      {renderRating(ratingKey, word, ratings[ratingKey], onRate)}
+    </>
   );
 
   const panelBody = (
@@ -446,7 +580,26 @@ const ToolsPanel = ({
                       <p className="tool-result-reason">
                         {detail?.reason || 'Semantically related lexical match.'}
                       </p>
-                      {renderActions(result, handleSaveLexical)}
+                      {renderActions(
+                        result,
+                        `lexical:${activeLexicalTask}:${result}`,
+                        handleSaveLexical,
+                        (rating) => {
+                          const key = `lexical:${activeLexicalTask}:${result}`;
+                          setRatings((current) => ({ ...current, [key]: rating }));
+                          void submitRating('lexical', result, rating, {
+                            pos: detail?.pos || undefined,
+                            model_score: detail?.score,
+                            reason: detail?.reason,
+                            input_payload: {
+                              word: activeLexicalWord,
+                              lexical_task: activeLexicalTask,
+                              context,
+                            },
+                            input_text: activeLexicalWord,
+                          });
+                        },
+                      )}
                     </article>
                   );
                 })
@@ -509,7 +662,26 @@ const ToolsPanel = ({
                         <span className="tool-result-tag">SMART</span>
                       </div>
                       <p className="tool-result-reason">{result.reason}</p>
-                      {renderActions(result.word, handleSaveSmart)}
+                      {renderActions(
+                        result.word,
+                        `constraints:${rhymeWith}:${relation}:${meaningOf}:${result.word}`,
+                        handleSaveSmart,
+                        (rating) => {
+                          const key = `constraints:${rhymeWith}:${relation}:${meaningOf}:${result.word}`;
+                          setRatings((current) => ({ ...current, [key]: rating }));
+                          void submitRating('constraints', result.word, rating, {
+                            model_score: result.score,
+                            reason: result.reason,
+                            input_payload: {
+                              rhyme_with: rhymeWith.trim(),
+                              relation,
+                              meaning_of: meaningOf.trim(),
+                              context,
+                            },
+                            input_text: `${rhymeWith.trim()}|${relation}|${meaningOf.trim()}`,
+                          });
+                        },
+                      )}
                     </article>
                   ))}
                 </>
@@ -561,7 +733,24 @@ const ToolsPanel = ({
                         <span className="tool-result-tag">ONE-WORD</span>
                       </div>
                       <p className="tool-result-reason">{result.meaning || result.reason}</p>
-                      {renderActions(result.word, handleSaveOneWord)}
+                      {renderActions(
+                        result.word,
+                        `oneword:${oneWordQuery}:${result.word}`,
+                        handleSaveOneWord,
+                        (rating) => {
+                          const key = `oneword:${oneWordQuery}:${result.word}`;
+                          setRatings((current) => ({ ...current, [key]: rating }));
+                          void submitRating('oneword', result.word, rating, {
+                            model_score: result.score,
+                            reason: result.reason,
+                            input_payload: {
+                              query: oneWordQuery.trim(),
+                              context,
+                            },
+                            input_text: oneWordQuery.trim(),
+                          });
+                        },
+                      )}
                     </article>
                   ))}
                 </>

@@ -65,3 +65,26 @@ async def get_current_user(
             detail="User not found",
         )
     return user
+
+
+async def get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+):
+    if credentials is None:
+        return None
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            return None
+    except JWTError:
+        return None
+
+    try:
+        object_id = ObjectId(user_id)
+    except Exception:
+        return None
+
+    user = await db.users.find_one({"_id": object_id})
+    return user

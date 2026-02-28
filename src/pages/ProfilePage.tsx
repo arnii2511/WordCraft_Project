@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
+import AppHeader from '../components/AppHeader';
 import type { UserProfile } from '../types';
 
 interface ProfilePageProps {
@@ -24,7 +25,6 @@ const ProfilePage = ({
   onUserUpdate,
 }: ProfilePageProps) => {
   const navigate = useNavigate();
-  const profileLabel = user?.username?.trim().charAt(0).toUpperCase() || 'P';
   const [username, setUsername] = useState(user?.username ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
   const [phone, setPhone] = useState(user?.phone ?? '');
@@ -145,20 +145,12 @@ const ProfilePage = ({
 
   return (
     <div className="profile-page">
-      <header className="tools-home-topbar topbar profile-header">
-        <h1 className="tools-home-brand topbar-title">WordCraft</h1>
-        <div className="tools-home-top-actions topbar-right">
-          <button type="button" className="btn-outline" onClick={() => navigate('/')}>
-            Tools
-          </button>
-          <button type="button" className="btn-outline" onClick={() => navigate('/editor')}>
-            Editor
-          </button>
-          <span className="profile-shortcut" title="Profile" aria-label="Profile">
-            {profileLabel}
-          </span>
-        </div>
-      </header>
+      <AppHeader
+        activePage="profile"
+        isAuthenticated={isAuthenticated}
+        user={user}
+        onRequireAuth={onRequireAuth}
+      />
 
       <section className="profile-card">
         <h2>Account Details</h2>

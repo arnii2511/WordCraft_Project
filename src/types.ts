@@ -107,3 +107,35 @@ export interface DocumentEntry {
   createdAt?: string | null;
   updatedAt?: string | null;
 }
+
+export type FeedbackTask =
+  | 'editor_suggestion'
+  | 'editor_rewrite'
+  | 'lexical'
+  | 'constraints'
+  | 'oneword';
+
+export interface FeedbackPayload {
+  task: FeedbackTask;
+  candidate: string;
+  rating: number;
+  context?: string;
+  mode?: 'write' | 'edit' | 'rewrite';
+  input_payload?: Record<string, unknown>;
+  source?: string;
+  pos?: string;
+  model_score?: number;
+  reason?: string;
+  session_id?: string;
+  input_text?: string;
+}
+
+export interface FeedbackResponse {
+  id: string;
+  task: string;
+  candidate: string;
+  rating: number;
+  quality: 'bad' | 'average' | 'good';
+  label: number;
+  message: string;
+}

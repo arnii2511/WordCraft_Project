@@ -7,6 +7,7 @@ import numpy as np
 from . import embeddings
 from .context_loader import load_contexts
 from .homonym_service import get_homophones
+from .ml_reranker import rerank_candidate_dicts
 from .rhyme_service import get_rhymes
 from .wordnet_service import (
     estimate_frequency,
@@ -140,6 +141,15 @@ def get_lexical_results(
         task=task,
         candidates=raw_candidates,
         context=context,
+        max_results=max_results,
+    )
+    details = rerank_candidate_dicts(
+        task="lexical",
+        payload={"word": cleaned, "lexical_task": task, "context": context or "neutral"},
+        candidates=details,
+        text_key="word",
+        score_key="score",
+        blend=0.76,
         max_results=max_results,
     )
     return [entry["word"] for entry in details], details

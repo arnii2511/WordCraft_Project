@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import ToolsPanel, { type ToolTab } from '../components/tools/ToolsPanel';
+import AppHeader from '../components/AppHeader';
 import type { UserProfile } from '../types';
 
 interface ToolsHomeProps {
@@ -50,37 +50,16 @@ const ToolsHome = ({
   user,
   onRequireAuth,
 }: ToolsHomeProps) => {
-  const navigate = useNavigate();
   const [activeTool, setActiveTool] = useState<ToolTab>('one_word');
-  const profileLabel = user?.username?.trim().charAt(0).toUpperCase() || 'P';
 
   return (
     <div className="tools-home-shell">
-      <header className="tools-home-topbar topbar">
-        <h1 className="tools-home-brand topbar-title">WordCraft</h1>
-        <div className="tools-home-top-actions topbar-right">
-          <button type="button" className="btn-outline is-active" aria-current="page">
-            Tools
-          </button>
-          <button type="button" className="btn-outline" onClick={() => navigate('/editor')}>
-            Editor
-          </button>
-          {isAuthenticated ? (
-            <button
-              type="button"
-              className="profile-shortcut"
-              onClick={() => navigate('/profile')}
-              title="Open profile"
-            >
-              {profileLabel}
-            </button>
-          ) : (
-            <button type="button" className="btn-outline" onClick={onRequireAuth}>
-              Login / Register
-            </button>
-          )}
-        </div>
-      </header>
+      <AppHeader
+        activePage="tools"
+        isAuthenticated={isAuthenticated}
+        user={user}
+        onRequireAuth={onRequireAuth}
+      />
 
       <section className="tools-home-hero">
         <h2>Find the exact word, fast.</h2>

@@ -9,6 +9,7 @@ import numpy as np
 from . import embeddings
 from .conceptnet_service import get_related_words
 from .context_loader import load_contexts
+from .ml_reranker import rerank_candidate_dicts
 from .wordnet_service import estimate_frequency, get_wordnet, is_valid_word
 
 _TOKEN_RE = re.compile(r"[a-zA-Z][a-zA-Z\-']+")
@@ -392,7 +393,15 @@ def get_one_word_substitutions(
 
     results.sort(key=lambda item: (item["score"], item["word"]), reverse=True)
     capped = max(1, min(10, int(limit or 10)))
-    top_results = results[:capped]
+    top_results = rerank_candidate_dicts(
+        task="oneword",
+        payload={"query": cleaned_query, "context": context or "neutral"},
+        candidates=results,
+        text_key="word",
+        score_key="score",
+        blend=0.74,
+        max_results=capped,
+    )
     if top_results:
         return top_results, "Top one-word substitutions ranked by grammar-safe meaning match."
     return [], "No one-word substitutions found for that description."

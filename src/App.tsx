@@ -111,7 +111,6 @@ function App() {
               setMode={setMode}
               user={user}
               isAuthenticated={isAuthenticated}
-              onLogout={handleLogout}
               onRequireAuth={() => setShowAuth(true)}
             />
           }

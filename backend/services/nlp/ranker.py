@@ -25,6 +25,17 @@ COPULAR_VERBS = {
     "get",
 }
 IRREGULAR_ADVERBS = {"well", "fast", "hard", "late", "early", "straight", "right"}
+SOURCE_PRIORITY = [
+    "selection",
+    "wordnet",
+    "conceptnet",
+    "derivational",
+    "context",
+    "slot",
+    "pattern",
+    "neutral",
+    "fallback",
+]
 _DETERMINERS = {
     "a",
     "an",
@@ -255,6 +266,7 @@ def rank_candidates(
         context_sim = _scale_similarity(_cosine_similarity(context_vector, word_vector))
         emotion = emotion_scores.get(word, 0.0) if emotion_scores else 0.0
         frequency = wordnet_service.estimate_frequency(word)
+        sources = set()
         source_score = 0.0
         if source_map:
             sources = source_map.get(word, set())
@@ -300,12 +312,21 @@ def rank_candidates(
             reasons.append("Rare word.")
 
         pos = _resolve_pos(word, expected_pos)
+        primary_source = "model"
+        if sources:
+            for src in SOURCE_PRIORITY:
+                if src in sources:
+                    primary_source = src
+                    break
+            else:
+                primary_source = sorted(sources)[0]
         scored.append(
             {
                 "word": word,
                 "score": round(float(score), 4),
                 "pos": pos,
                 "note": " ".join(reasons),
+                "source": primary_source,
             }
         )
 

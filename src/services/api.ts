@@ -3,6 +3,8 @@ import type {
   AuthResponse,
   ConstraintResponse,
   DocumentEntry,
+  FeedbackPayload,
+  FeedbackResponse,
   FavoriteEntry,
   LexicalTask,
   LexicalResponse,
@@ -257,6 +259,14 @@ export const documentsAPI = {
   },
 };
 
+export const feedbackAPI = {
+  submitRating: async (payload: FeedbackPayload): Promise<FeedbackResponse> => {
+    // Feedback endpoint accepts optional user; allow guest telemetry too.
+    const response = await publicApi.post<FeedbackResponse>('/feedback', payload);
+    return response.data;
+  },
+};
+
 export default {
   authAPI,
   writingAPI,
@@ -265,4 +275,5 @@ export default {
   onewordAPI,
   documentsAPI,
   favoritesAPI,
+  feedbackAPI,
 };

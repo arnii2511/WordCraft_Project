@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { favoritesAPI } from '../services/api';
-import type { SelectionPayload, SuggestionItem } from '../types';
+import { favoritesAPI, feedbackAPI } from '../services/api';
+import type { FeedbackTask, SelectionPayload, SuggestionItem } from '../types';
 
 interface SuggestionSidebarProps {
   suggestions?: SuggestionItem[];
@@ -37,6 +37,8 @@ const SuggestionSidebar = ({
 }: SuggestionSidebarProps) => {
   const [savedWords, setSavedWords] = useState<string[]>([]);
   const [savedRewrites, setSavedRewrites] = useState<string[]>([]);
+  const [ratedWords, setRatedWords] = useState<Record<string, number>>({});
+  const [ratedRewrites, setRatedRewrites] = useState<Record<string, number>>({});
   const contexts = [
     'neutral',
     'hopeful',
@@ -52,6 +54,13 @@ const SuggestionSidebar = ({
 
   const topWord = suggestions[0]?.word || '';
   const selectionWord = selection?.text?.split(/\s+/)[0] || '';
+  const sessionId =
+    localStorage.getItem('wordcraft_feedback_session') ||
+    (() => {
+      const generated = `sess_${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem('wordcraft_feedback_session', generated);
+      return generated;
+    })();
 
   const panelTitle = useMemo(() => {
     if (mode === 'edit') return 'Clarity & Grammar Fixes';
@@ -116,6 +125,74 @@ const SuggestionSidebar = ({
     }
   };
 
+  const submitRating = async (
+    task: FeedbackTask,
+    candidate: string,
+    rating: number,
+    extra: {
+      source?: string;
+      pos?: string;
+      model_score?: number;
+      reason?: string;
+      input_payload?: Record<string, unknown>;
+      input_text?: string;
+    } = {},
+  ) => {
+    try {
+      await feedbackAPI.submitRating({
+        task,
+        candidate,
+        rating,
+        context,
+        mode,
+        source: extra.source || 'ui',
+        session_id: sessionId,
+        ...extra,
+      });
+    } catch (error) {
+      console.error('Error submitting feedback rating:', error);
+    }
+  };
+
+  const submitImplicitGood = (
+    task: FeedbackTask,
+    candidate: string,
+    extra: {
+      pos?: string;
+      model_score?: number;
+      reason?: string;
+      input_payload?: Record<string, unknown>;
+      input_text?: string;
+    } = {},
+  ) => {
+    void submitRating(task, candidate, 4, {
+      ...extra,
+      source: extra.source || 'implicit_insert',
+      reason:
+        extra.reason || 'Implicit positive feedback from insert/accept action.',
+    });
+  };
+
+  const renderRating = (
+    value: string,
+    activeRating: number | undefined,
+    onRate: (rating: number) => void,
+  ) => (
+    <div className="rating-row" aria-label={`Rate ${value}`}>
+      <span className="rating-label">Rate</span>
+      {[1, 2, 3, 4, 5].map((rating) => (
+        <button
+          key={`${value}-${rating}`}
+          type="button"
+          className={`rating-chip ${activeRating === rating ? 'is-active' : ''}`}
+          onClick={() => onRate(rating)}
+        >
+          {rating}
+        </button>
+      ))}
+    </div>
+  );
+
   const handleSaveRewrite = async (text: string) => {
     if (!isAuthenticated) {
       return;
@@ -179,7 +256,19 @@ const SuggestionSidebar = ({
                     </p>
                     <div className="rewrite-actions">
                       <button
-                        onClick={() => onInsertRewrite(variant)}
+                        onClick={() => {
+                          onInsertRewrite(variant);
+                          submitImplicitGood('editor_rewrite', variant, {
+                            reason: 'Implicit positive feedback from rewrite accept action.',
+                            input_payload: {
+                              original,
+                              context,
+                              mode,
+                              selection: selection || null,
+                            },
+                            input_text: original,
+                          });
+                        }}
                         className="btn-accept"
                       >
                         Accept
@@ -197,6 +286,23 @@ const SuggestionSidebar = ({
                       Save
                     </button>
                     </div>
+                    {renderRating(
+                      variant,
+                      ratedRewrites[variant],
+                      (rating) => {
+                        setRatedRewrites((current) => ({ ...current, [variant]: rating }));
+                        void submitRating('editor_rewrite', variant, rating, {
+                          reason: 'Rewrite variant rating from sidebar.',
+                          input_payload: {
+                            original,
+                            context,
+                            mode,
+                            selection: selection || null,
+                          },
+                          input_text: original,
+                        });
+                      },
+                    )}
                   </div>
                 ))}
               </div>
@@ -207,7 +313,19 @@ const SuggestionSidebar = ({
                 </p>
                 <div className="rewrite-actions">
                   <button
-                    onClick={() => onInsertRewrite(rewrite)}
+                    onClick={() => {
+                      onInsertRewrite(rewrite);
+                      submitImplicitGood('editor_rewrite', rewrite, {
+                        reason: 'Implicit positive feedback from rewrite accept action.',
+                        input_payload: {
+                          original,
+                          context,
+                          mode,
+                          selection: selection || null,
+                        },
+                        input_text: original,
+                      });
+                    }}
                     className="btn-accept"
                   >
                     Accept
@@ -223,6 +341,23 @@ const SuggestionSidebar = ({
                     Save
                   </button>
                 </div>
+                {renderRating(
+                  rewrite,
+                  ratedRewrites[rewrite],
+                  (rating) => {
+                    setRatedRewrites((current) => ({ ...current, [rewrite]: rating }));
+                    void submitRating('editor_rewrite', rewrite, rating, {
+                      reason: 'Single rewrite rating from sidebar.',
+                      input_payload: {
+                        original,
+                        context,
+                        mode,
+                        selection: selection || null,
+                      },
+                      input_text: original,
+                    });
+                  },
+                )}
               </>
             ) : (
               <div className="rewrite-actions">
@@ -262,7 +397,21 @@ const SuggestionSidebar = ({
               </div>
               <div className="suggestion-actions">
                 <button
-                  onClick={() => onInsertWord(item.word)}
+                  onClick={() => {
+                    onInsertWord(item.word);
+                    submitImplicitGood('editor_suggestion', item.word, {
+                      pos: item.pos,
+                      model_score: item.score,
+                      reason: item.note || 'Inserted into editor.',
+                      input_payload: {
+                        context,
+                        mode,
+                        selection: selection || null,
+                        detected_blank: detectedBlank,
+                      },
+                      input_text: original,
+                    });
+                  }}
                   className="btn-accept"
                 >
                   Insert
@@ -278,6 +427,25 @@ const SuggestionSidebar = ({
                   Save
                 </button>
               </div>
+              {renderRating(
+                item.word,
+                ratedWords[item.word],
+                (rating) => {
+                  setRatedWords((current) => ({ ...current, [item.word]: rating }));
+                  void submitRating('editor_suggestion', item.word, rating, {
+                    pos: item.pos,
+                    model_score: item.score,
+                    reason: item.note,
+                    input_payload: {
+                      context,
+                      mode,
+                      selection: selection || null,
+                      detected_blank: detectedBlank,
+                    },
+                    input_text: original,
+                  });
+                },
+              )}
             </div>
           ))}
 

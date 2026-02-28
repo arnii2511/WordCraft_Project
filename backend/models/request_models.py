@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -92,3 +92,28 @@ class OneWordResponse(BaseModel):
     query: str
     results: list[OneWordResult]
     note: str | None = None
+
+
+class FeedbackRequest(BaseModel):
+    task: Literal["editor_suggestion", "editor_rewrite", "lexical", "constraints", "oneword"]
+    candidate: str = Field(..., min_length=1)
+    rating: int = Field(..., ge=1, le=5)
+    context: str | None = None
+    mode: Literal["write", "edit", "rewrite"] | None = None
+    input_payload: dict[str, Any] = Field(default_factory=dict)
+    source: str = Field(default="ui")
+    pos: str | None = None
+    model_score: float | None = None
+    reason: str | None = None
+    session_id: str | None = None
+    input_text: str | None = None
+
+
+class FeedbackResponse(BaseModel):
+    id: str
+    task: str
+    candidate: str
+    rating: int
+    quality: Literal["bad", "average", "good"]
+    label: int
+    message: str
