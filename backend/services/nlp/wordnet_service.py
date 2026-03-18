@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Iterable
 
+from .runtime_profile import is_free_host_profile
+
 _WORDNET_DOWNLOAD_ATTEMPTED = False
 
 _WORD_RE = re.compile(r"^[a-zA-Z][a-zA-Z\-]*$")
@@ -49,6 +51,8 @@ def get_wordnet():
     try:
         wn.synsets("test")
     except LookupError:
+        if is_free_host_profile():
+            return None
         if _WORDNET_DOWNLOAD_ATTEMPTED:
             return None
         _WORDNET_DOWNLOAD_ATTEMPTED = True
