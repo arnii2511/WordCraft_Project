@@ -16,16 +16,22 @@ import type {
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const CORE_API_BASE_URL = import.meta.env.VITE_CORE_API_URL || API_BASE_URL;
+const ML_API_BASE_URL = import.meta.env.VITE_ML_API_URL || API_BASE_URL;
 
-const publicApi = axios.create({
-  baseURL: API_BASE_URL,
+const corePublicApi = axios.create({
+  baseURL: CORE_API_BASE_URL,
 });
 
-const protectedApi = axios.create({
-  baseURL: API_BASE_URL,
+const mlPublicApi = axios.create({
+  baseURL: ML_API_BASE_URL,
 });
 
-protectedApi.interceptors.request.use((config) => {
+const protectedCoreApi = axios.create({
+  baseURL: CORE_API_BASE_URL,
+});
+
+protectedCoreApi.interceptors.request.use((config) => {
   const token = localStorage.getItem('auth_token');
   if (token) {
     config.headers = config.headers ?? {};
@@ -48,19 +54,19 @@ const clearProfile = () => {
 // Authentication
 export const authAPI = {
   login: async (email: string, password: string): Promise<AuthResponse> => {
-    const response = await publicApi.post<AuthResponse>('/auth/login', { email, password });
+    const response = await corePublicApi.post<AuthResponse>('/auth/login', { email, password });
     localStorage.setItem('auth_token', response.data.token);
     storeProfile(response.data.user);
     return response.data;
   },
 
   register: async (payload: Record<string, string>): Promise<AuthResponse> => {
-    const response = await publicApi.post<AuthResponse>('/auth/register', payload);
+    const response = await corePublicApi.post<AuthResponse>('/auth/register', payload);
     return response.data;
   },
 
   getMe: async (): Promise<UserProfile> => {
-    const response = await protectedApi.get<UserProfile>('/auth/me');
+    const response = await protectedCoreApi.get<UserProfile>('/auth/me');
     storeProfile(response.data);
     return response.data;
   },
@@ -72,7 +78,7 @@ export const authAPI = {
     bio?: string;
     interests?: string;
   }): Promise<UserProfile> => {
-    const response = await protectedApi.put<UserProfile>('/auth/me', payload);
+    const response = await protectedCoreApi.put<UserProfile>('/auth/me', payload);
     storeProfile(response.data);
     return response.data;
   },
@@ -81,7 +87,7 @@ export const authAPI = {
     current_password: string;
     new_password: string;
   }): Promise<{ message: string }> => {
-    const response = await protectedApi.post<{ message: string }>(
+    const response = await protectedCoreApi.post<{ message: string }>(
       '/auth/change-password',
       payload,
     );
@@ -117,7 +123,7 @@ export const writingAPI = {
     trigger: 'auto' | 'button',
     vocabularyPreference: VocabularyPreference = 'balanced',
   ): Promise<SuggestResponse> => {
-    const response = await publicApi.post<SuggestResponse>('/suggest', {
+    const response = await mlPublicApi.post<SuggestResponse>('/suggest', {
       sentence,
       context,
       mode,
@@ -137,7 +143,7 @@ export const lexicalAPI = {
     context?: string,
     vocabularyPreference: VocabularyPreference = 'balanced',
   ): Promise<LexicalResponse> => {
-    const response = await publicApi.post<LexicalResponse>('/lexical', {
+    const response = await mlPublicApi.post<LexicalResponse>('/lexical', {
       word,
       task,
       context,
@@ -156,7 +162,7 @@ export const constraintsAPI = {
     limit?: number;
     vocabulary_preference?: VocabularyPreference;
   }): Promise<ConstraintResponse> => {
-    const response = await publicApi.post<ConstraintResponse>('/constraints', payload);
+    const response = await mlPublicApi.post<ConstraintResponse>('/constraints', payload);
     return response.data;
   },
 };
@@ -168,7 +174,7 @@ export const onewordAPI = {
     limit?: number;
     vocabulary_preference?: VocabularyPreference;
   }): Promise<OneWordResponse> => {
-    const response = await publicApi.post<OneWordResponse>('/oneword', payload);
+    const response = await mlPublicApi.post<OneWordResponse>('/oneword', payload);
     return response.data;
   },
 };
@@ -182,24 +188,24 @@ export const favoritesAPI = {
     context?: string;
     related_to?: string;
   }): Promise<FavoriteEntry> => {
-    const response = await protectedApi.post<FavoriteEntry>('/saved-words', payload);
+    const response = await protectedCoreApi.post<FavoriteEntry>('/saved-words', payload);
     return response.data;
   },
 
   getFavorites: async (): Promise<FavoriteEntry[]> => {
-    const response = await protectedApi.get<FavoriteEntry[]>('/saved-words');
+    const response = await protectedCoreApi.get<FavoriteEntry[]>('/saved-words');
     return response.data;
   },
 
   deleteFavorite: async (id: number | string) => {
-    await protectedApi.delete(`/saved-words/${id}`);
+    await protectedCoreApi.delete(`/saved-words/${id}`);
   },
 };
 
 // Documents API
 export const documentsAPI = {
   getDocuments: async (): Promise<DocumentEntry[]> => {
-    const response = await protectedApi.get('/documents');
+    const response = await protectedCoreApi.get('/documents');
     return (response.data || []).map((doc: any) => ({
       id: doc.id,
       title: doc.title,
@@ -223,7 +229,7 @@ export const documentsAPI = {
     },
   ): Promise<DocumentEntry> => {
     if (payload.id) {
-      const response = await protectedApi.put(`/documents/${payload.id}`, {
+      const response = await protectedCoreApi.put(`/documents/${payload.id}`, {
         title: payload.title,
         content_html: payload.contentHtml,
         content_text: payload.contentText,
@@ -242,7 +248,7 @@ export const documentsAPI = {
         updatedAt: doc.updated_at,
       };
     }
-    const response = await protectedApi.post('/documents', {
+    const response = await protectedCoreApi.post('/documents', {
       title: payload.title,
       content_html: payload.contentHtml,
       content_text: payload.contentText,
@@ -263,18 +269,18 @@ export const documentsAPI = {
   },
 
   deleteDocument: async (id: string) => {
-    await protectedApi.delete(`/documents/${id}`);
+    await protectedCoreApi.delete(`/documents/${id}`);
   },
 };
 
 export const feedbackAPI = {
   submitRating: async (payload: FeedbackPayload): Promise<FeedbackResponse> => {
     // Feedback endpoint accepts optional user; allow guest telemetry too.
-    const response = await publicApi.post<FeedbackResponse>('/feedback', payload);
+    const response = await corePublicApi.post<FeedbackResponse>('/feedback', payload);
     return response.data;
   },
   submitImplicit: async (payload: ImplicitFeedbackPayload): Promise<FeedbackResponse> => {
-    const response = await publicApi.post<FeedbackResponse>('/feedback/implicit', payload);
+    const response = await corePublicApi.post<FeedbackResponse>('/feedback/implicit', payload);
     return response.data;
   },
 };
