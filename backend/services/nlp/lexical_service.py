@@ -74,7 +74,7 @@ def _context_words(context: str | None) -> set[str]:
 def _context_similarity(context: str | None, candidate: str) -> float:
     if not context:
         return 0.0
-    context_vec = embeddings.get_context_centroid(context.strip().lower())
+    context_vec = embeddings.get_context_centroid(context.strip().lower(), contexts=_CONTEXT_CACHE or {})
     candidate_vec = embeddings.get_word_embedding(candidate)
     return _scale(_cosine_similarity(context_vec, candidate_vec))
 

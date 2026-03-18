@@ -24,7 +24,6 @@ def initialize() -> None:
         return
     try:
         _CONTEXTS = load_contexts()
-        embeddings.ensure_context_embeddings(_CONTEXTS)
         load_lexicon()
         _INITIALIZED = True
     except Exception as exc:  # pragma: no cover

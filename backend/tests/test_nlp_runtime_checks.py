@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import numpy as np
+
 from backend.services.nlp.constraints_service import get_constraint_matches
+from backend.services.nlp import embeddings as embeddings_module
+from backend.services.nlp.ml_reranker import rerank_candidate_dicts
 from backend.services.nlp.engine import generate_suggestions
 from backend.services.nlp.lexical_service import get_lexical_results
 from backend.services.nlp.oneword_service import get_one_word_substitutions
@@ -94,7 +98,6 @@ def test_free_host_profile_limits_rewrite_variants(monkeypatch):
 
 def test_free_host_profile_disables_transformers(monkeypatch):
     monkeypatch.setenv("WORDCRAFT_ML_PROFILE", "free")
-    import backend.services.nlp.embeddings as embeddings_module
 
     embeddings_module._model = None
     assert embeddings_module.load_model() is None
@@ -106,3 +109,47 @@ def test_free_host_profile_disables_retrieval(monkeypatch):
     import backend.ml.retrieval as retrieval_module
 
     assert retrieval_module._is_enabled() is False
+
+
+def test_free_host_profile_skips_lexical_reranker(monkeypatch):
+    monkeypatch.setenv("WORDCRAFT_ML_PROFILE", "free")
+    candidates = [
+        {"word": "sorrowful", "score": 0.61, "reason": "seed"},
+        {"word": "melancholic", "score": 0.82, "reason": "seed"},
+    ]
+    output = rerank_candidate_dicts(
+        task="lexical",
+        payload={"word": "sad", "lexical_task": "synonyms", "context": "formal"},
+        candidates=candidates,
+        text_key="word",
+        score_key="score",
+        max_results=2,
+    )
+    assert output == candidates
+
+
+def test_context_centroid_is_built_lazily(monkeypatch):
+    embeddings_module._word_embeddings.clear()
+    embeddings_module._context_centroids.clear()
+
+    calls: list[list[str]] = []
+
+    def fake_encode_texts(texts):
+        batch = list(texts)
+        calls.append(batch)
+        return np.vstack(
+            [np.full((192,), float(index + 1), dtype=np.float32) for index, _ in enumerate(batch)]
+        )
+
+    monkeypatch.setattr(embeddings_module, "encode_texts", fake_encode_texts)
+    contexts = {
+        "formal": {"words": ["precise", "measured"]},
+        "hopeful": {"words": ["bright", "uplifted"]},
+    }
+
+    centroid = embeddings_module.get_context_centroid("formal", contexts=contexts)
+
+    assert centroid is not None
+    assert set(embeddings_module._context_centroids) == {"formal"}
+    assert "hopeful" not in embeddings_module._context_centroids
+    assert calls == [["measured", "precise"]]

@@ -815,7 +815,7 @@ def get_one_word_substitutions(
         source_score = _source_score(meta.sources)
         context_fit = 0.0
         if context:
-            context_vec = embeddings.get_context_centroid(context.strip().lower())
+            context_vec = embeddings.get_context_centroid(context.strip().lower(), contexts=_CONTEXT_CACHE or {})
             context_fit = _scale(_cosine_similarity(context_vec, candidate_vec))
         if word in context_words:
             context_fit = max(context_fit, 0.7)

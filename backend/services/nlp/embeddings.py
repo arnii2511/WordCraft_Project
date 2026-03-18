@@ -96,30 +96,59 @@ def embed_sentence(text: str) -> np.ndarray:
     return embeddings[0]
 
 
+def ensure_word_embeddings(words: Iterable[str]) -> None:
+    unique_words = sorted({(word or "").strip().lower() for word in words if (word or "").strip()})
+    missing_words = [word for word in unique_words if word not in _word_embeddings]
+    if not missing_words:
+        return
+    vectors = encode_texts(missing_words)
+    for word, vector in zip(missing_words, vectors):
+        _word_embeddings[word] = vector
+
+
 def ensure_context_embeddings(contexts: dict[str, dict]) -> None:
     if _context_centroids:
         return
-
     all_words: list[str] = []
     for payload in contexts.values():
         all_words.extend(payload.get("words", []))
-    unique_words = sorted(set(all_words))
-
-    if unique_words:
-        vectors = encode_texts(unique_words)
-        for word, vector in zip(unique_words, vectors):
-            _word_embeddings[word] = vector
-
+    ensure_word_embeddings(all_words)
     for name, payload in contexts.items():
-        words = payload.get("words", [])
-        vectors = [_word_embeddings[word] for word in words if word in _word_embeddings]
-        if vectors:
-            centroid = np.mean(vectors, axis=0)
-            _context_centroids[name] = _normalize(centroid)
+        ensure_context_centroid(name, contexts=contexts)
 
 
-def get_context_centroid(context: str) -> np.ndarray | None:
-    return _context_centroids.get(context)
+def ensure_context_centroid(context: str, contexts: dict[str, dict] | None = None) -> np.ndarray | None:
+    key = (context or "").strip().lower()
+    if not key:
+        return None
+    cached = _context_centroids.get(key)
+    if cached is not None:
+        return cached
+    if contexts is None:
+        return None
+    payload = contexts.get(key)
+    if not payload:
+        return None
+    words = [(word or "").strip().lower() for word in payload.get("words", []) if (word or "").strip()]
+    if not words:
+        return None
+    ensure_word_embeddings(words)
+    vectors = [_word_embeddings[word] for word in words if word in _word_embeddings]
+    if not vectors:
+        return None
+    centroid = _normalize(np.mean(vectors, axis=0))
+    _context_centroids[key] = centroid
+    return centroid
+
+
+def get_context_centroid(context: str, contexts: dict[str, dict] | None = None) -> np.ndarray | None:
+    key = (context or "").strip().lower()
+    if not key:
+        return None
+    cached = _context_centroids.get(key)
+    if cached is not None:
+        return cached
+    return ensure_context_centroid(key, contexts=contexts)
 
 
 def get_word_embedding(word: str) -> np.ndarray | None:

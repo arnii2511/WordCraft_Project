@@ -10,10 +10,13 @@ from typing import Any
 
 import numpy as np
 
-from backend.ml.retrieval import retrieve_candidates
 from backend.services.nlp import embeddings
 from backend.services.nlp.context_loader import load_contexts
-from backend.services.nlp.runtime_profile import cross_encoder_enabled, retrieval_enabled
+from backend.services.nlp.runtime_profile import (
+    cross_encoder_enabled_for_task,
+    reranker_enabled_for_task,
+    retrieval_enabled_for_task,
+)
 
 DEFAULT_ARTIFACT = "backend/ml/models/reranker.pkl"
 DEFAULT_BEHAVIOR_PRIORS = "backend/ml/models/behavior_priors.json"
@@ -129,8 +132,8 @@ def _prob_to_score(probabilities: np.ndarray, classes: np.ndarray) -> np.ndarray
     return probabilities @ class_values
 
 
-def _cross_encoder_scores(artifact: dict[str, Any], texts: list[str]) -> np.ndarray:
-    if not cross_encoder_enabled():
+def _cross_encoder_scores(artifact: dict[str, Any], texts: list[str], task: str) -> np.ndarray:
+    if not cross_encoder_enabled_for_task(task):
         raise RuntimeError("cross-encoder disabled for current runtime profile")
     model_path = artifact.get("model_path")
     if not model_path:
@@ -205,7 +208,7 @@ def _tone_similarity(payload: dict[str, Any], candidate_text: str) -> float:
     context_words = set(contexts.get(context, {}).get("words", []))
     if candidate_text in context_words:
         return 1.0
-    c_vec = embeddings.get_context_centroid(context)
+    c_vec = embeddings.get_context_centroid(context, contexts=contexts)
     w_vec = embeddings.get_word_embedding(candidate_text)
     return max(0.0, min(1.0, (_cosine(c_vec, w_vec) + 1.0) / 2.0))
 
@@ -261,6 +264,8 @@ def _merge_retrieval_candidates(
     max_extra: int = 24,
 ) -> list[dict[str, Any]]:
     existing = {str(item.get(text_key, "")).strip().lower() for item in candidates if item.get(text_key)}
+    from backend.ml.retrieval import retrieve_candidates
+
     retrieved = retrieve_candidates(
         task=task,
         payload=payload,
@@ -300,8 +305,10 @@ def rerank_candidate_dicts(
         return candidates
     if _truthy_env(os.getenv("WORDCRAFT_DISABLE_RERANKER")):
         return candidates[:max_results] if max_results else candidates
+    if not reranker_enabled_for_task(task):
+        return candidates[:max_results] if max_results else candidates
 
-    if retrieval_enabled():
+    if retrieval_enabled_for_task(task):
         candidates = _merge_retrieval_candidates(
             task=task,
             payload=payload,
@@ -337,7 +344,7 @@ def rerank_candidate_dicts(
             max_prob = np.max(prob, axis=1)
             max_label = float(max(model.classes_)) if len(model.classes_) else 3.0
         elif artifact_type.startswith("cross_encoder"):
-            raw_scores = _cross_encoder_scores(artifact, texts)
+            raw_scores = _cross_encoder_scores(artifact, texts, task=task)
             max_prob = raw_scores
             max_label = 1.0
         else:

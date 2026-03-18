@@ -56,3 +56,27 @@ def cross_encoder_enabled() -> bool:
 def rewrite_variant_limit(default: int = 3) -> int:
     return 1 if is_free_host_profile() else default
 
+
+def reranker_enabled_for_task(task: str) -> bool:
+    normalized = (task or "").strip().lower()
+    if not is_free_host_profile():
+        return True
+    return normalized in {"suggest_blank", "suggest_selection", "suggest_sentence"}
+
+
+def retrieval_enabled_for_task(task: str) -> bool:
+    if not retrieval_enabled():
+        return False
+    normalized = (task or "").strip().lower()
+    if is_free_host_profile():
+        return normalized in {"suggest_blank", "suggest_selection", "suggest_sentence"}
+    return True
+
+
+def cross_encoder_enabled_for_task(task: str) -> bool:
+    if not cross_encoder_enabled():
+        return False
+    normalized = (task or "").strip().lower()
+    if is_free_host_profile():
+        return normalized in {"suggest_blank", "suggest_selection", "suggest_sentence"}
+    return True

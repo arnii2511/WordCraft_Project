@@ -213,7 +213,7 @@ def _semantic_similarity(word: str, target: str) -> float:
 def _context_similarity(word: str, context: str | None) -> float:
     if not context:
         return 0.0
-    cv = embeddings.get_context_centroid(context.strip().lower())
+    cv = embeddings.get_context_centroid(context.strip().lower(), contexts=_CONTEXT_CACHE or {})
     wv = embeddings.get_word_embedding(word)
     return _scale(_cosine_similarity(cv, wv))
 
