@@ -9,6 +9,9 @@ def _truthy(value: str | None) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+_SUGGESTION_TASKS = {"suggest_blank", "suggest_selection", "suggest_sentence"}
+
+
 def ml_profile() -> str:
     return (os.getenv("WORDCRAFT_ML_PROFILE") or "").strip().lower()
 
@@ -57,26 +60,35 @@ def rewrite_variant_limit(default: int = 3) -> int:
     return 1 if is_free_host_profile() else default
 
 
-def reranker_enabled_for_task(task: str) -> bool:
+def semantic_embeddings_enabled_for_task(task: str) -> bool:
     normalized = (task or "").strip().lower()
+    if _truthy(os.getenv("WORDCRAFT_DISABLE_SEMANTIC_EMBEDDINGS")):
+        return False
+    if normalized == "lexical" and not _truthy(os.getenv("WORDCRAFT_ENABLE_LEXICAL_EMBEDDINGS")):
+        return False
     if not is_free_host_profile():
         return True
-    return normalized in {"suggest_blank", "suggest_selection", "suggest_sentence"}
+    return normalized in _SUGGESTION_TASKS
+
+
+def reranker_enabled_for_task(task: str) -> bool:
+    normalized = (task or "").strip().lower()
+    if normalized == "lexical":
+        return False
+    if not is_free_host_profile():
+        return True
+    return normalized in _SUGGESTION_TASKS
 
 
 def retrieval_enabled_for_task(task: str) -> bool:
     if not retrieval_enabled():
         return False
     normalized = (task or "").strip().lower()
-    if is_free_host_profile():
-        return normalized in {"suggest_blank", "suggest_selection", "suggest_sentence"}
-    return True
+    return normalized in _SUGGESTION_TASKS
 
 
 def cross_encoder_enabled_for_task(task: str) -> bool:
     if not cross_encoder_enabled():
         return False
     normalized = (task or "").strip().lower()
-    if is_free_host_profile():
-        return normalized in {"suggest_blank", "suggest_selection", "suggest_sentence"}
-    return True
+    return normalized in _SUGGESTION_TASKS

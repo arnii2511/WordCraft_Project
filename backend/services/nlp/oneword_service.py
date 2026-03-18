@@ -10,7 +10,7 @@ from . import embeddings
 from .conceptnet_service import get_related_words
 from .context_loader import load_contexts
 from .ml_reranker import rerank_candidate_dicts
-from .runtime_profile import conceptnet_runtime_enabled
+from .runtime_profile import conceptnet_runtime_enabled, semantic_embeddings_enabled_for_task
 from .wordnet_service import estimate_frequency, get_primary_pos, get_wordnet, is_valid_word, search_definition_entries
 
 _TOKEN_RE = re.compile(r"[a-zA-Z][a-zA-Z\-']+")
@@ -76,6 +76,12 @@ _REFLEXIVE_MAP = {
     "themselves": "self",
 }
 _DIRECT_QUERY_SEEDS: dict[str, list[tuple[str, str]]] = {
+    "fear of people": [
+        ("anthropophobia", "an abnormal fear of people"),
+    ],
+    "fear of heights": [
+        ("acrophobia", "a morbid fear of heights"),
+    ],
     "fear of crowds": [
         ("enochlophobia", "an abnormal fear of crowds"),
         ("ochlophobia", "fear of crowds or mobs"),
@@ -105,6 +111,8 @@ _DIRECT_QUERY_SEEDS: dict[str, list[tuple[str, str]]] = {
     ],
 }
 _STRICT_DIRECT_QUERIES = {
+    "fear of people",
+    "fear of heights",
     "fear of crowds",
     "fear of open spaces",
     "love of knowledge",
@@ -279,8 +287,7 @@ def _phobia_definition_matches_target(def_tokens: set[str], target_tokens: set[s
 
 @lru_cache(maxsize=128)
 def _lookup_phobia_candidates(target_signature: str) -> list[tuple[str, str]]:
-    wn = get_wordnet()
-    if wn is None or not target_signature:
+    if not target_signature:
         return []
     target_tokens = {item for item in target_signature.split("|") if item}
     results: list[tuple[str, str]] = []
@@ -301,6 +308,10 @@ def _lookup_phobia_candidates(target_signature: str) -> list[tuple[str, str]]:
         if seed and seed[0] not in seen:
             seen.add(seed[0])
             results.append(seed)
+
+    wn = get_wordnet()
+    if wn is None:
+        return results[:24]
 
     for synset in wn.all_synsets("n"):
         definition = synset.definition().lower()
@@ -325,8 +336,7 @@ def _lookup_suffix_candidates(
     suffix: str,
     direct_seed_items: tuple[tuple[str, tuple[str, str]], ...] = (),
 ) -> list[tuple[str, str]]:
-    wn = get_wordnet()
-    if wn is None or not target_signature:
+    if not target_signature:
         return []
     target_tokens = {item for item in target_signature.split("|") if item}
     results: list[tuple[str, str]] = []
@@ -338,6 +348,10 @@ def _lookup_suffix_candidates(
         if seed and seed[0] not in seen:
             seen.add(seed[0])
             results.append(seed)
+
+    wn = get_wordnet()
+    if wn is None:
+        return results[:24]
 
     for entry in search_definition_entries(
         " ".join(sorted(target_tokens)),
@@ -660,6 +674,19 @@ def _build_reason(
     return " ".join(parts)
 
 
+def _definition_semantic_fallback(
+    query_tokens: set[str],
+    overlap: float,
+    source_score: float,
+    technical_hit: bool,
+    meaning_terms: set[str],
+) -> float:
+    meaning_overlap = len(query_tokens & meaning_terms) / max(1, len(query_tokens)) if meaning_terms else 0.0
+    score = max(overlap, meaning_overlap)
+    score = max(score, min(0.82, 0.38 + 0.28 * score + 0.12 * source_score + (0.12 if technical_hit else 0.0)))
+    return min(0.92, score)
+
+
 def _advanced_oneword_bonus(
     *,
     word: str,
@@ -742,7 +769,8 @@ def get_one_word_substitutions(
     mania_target_tokens = _extract_suffix_target(cleaned_query, _MANIA_PATTERNS)
     context_words = _context_words(context)
     context_stems = set(_tokenize(" ".join(context_words)))
-    query_vec = embeddings.embed_sentence(cleaned_query)
+    use_semantic_embeddings = semantic_embeddings_enabled_for_task("oneword")
+    query_vec = embeddings.embed_sentence(cleaned_query) if use_semantic_embeddings else None
 
     candidates = _collect_wordnet_candidates(cleaned_query, query_tokens)
     direct_query_hint = _inject_direct_query_candidates(candidates, cleaned_query)
@@ -803,18 +831,31 @@ def get_one_word_substitutions(
         )
         if self_hint and not self_topic_hit:
             continue
-        candidate_vec = embeddings.get_word_embedding(word)
-        semantic = _scale(_cosine_similarity(query_vec, candidate_vec))
-        definition_sem = 0.0
-        if definition:
-            def_vec = embeddings.embed_sentence(definition)
-            definition_sem = _scale(_cosine_similarity(query_vec, def_vec))
-        semantic = max(semantic, definition_sem)
-
+        technical_hit = ("pattern" in meta.sources or "dictionary" in meta.sources) and (
+            word.endswith("phobia") or word.endswith("philia") or word.endswith("mania")
+        )
         pos_score = _pos_score(meta, person_hint, abstract_hint)
         source_score = _source_score(meta.sources)
+        candidate_vec = None
+        if use_semantic_embeddings:
+            candidate_vec = embeddings.get_word_embedding(word)
+            semantic = _scale(_cosine_similarity(query_vec, candidate_vec))
+            definition_sem = 0.0
+            if definition:
+                def_vec = embeddings.embed_sentence(definition)
+                definition_sem = _scale(_cosine_similarity(query_vec, def_vec))
+            semantic = max(semantic, definition_sem)
+        else:
+            semantic = _definition_semantic_fallback(
+                token_set,
+                overlap,
+                source_score,
+                technical_hit,
+                meaning_terms,
+            )
+
         context_fit = 0.0
-        if context:
+        if context and use_semantic_embeddings and candidate_vec is not None:
             context_vec = embeddings.get_context_centroid(context.strip().lower(), contexts=_CONTEXT_CACHE or {})
             context_fit = _scale(_cosine_similarity(context_vec, candidate_vec))
         if word in context_words:
@@ -833,9 +874,6 @@ def get_one_word_substitutions(
         if self_hint and person_hint and "noun.person" not in meta.lexnames:
             self_focus -= 0.12
 
-        technical_hit = ("pattern" in meta.sources or "dictionary" in meta.sources) and (
-            word.endswith("phobia") or word.endswith("philia") or word.endswith("mania")
-        )
         if phobia_hint and word.endswith("phobia") and phobia_target_tokens and not (meaning_terms & phobia_target_tokens):
             continue
         if (

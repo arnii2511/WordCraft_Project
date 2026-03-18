@@ -4,10 +4,16 @@ import numpy as np
 
 from backend.services.nlp.constraints_service import get_constraint_matches
 from backend.services.nlp import embeddings as embeddings_module
+from backend.services.nlp import oneword_service
 from backend.services.nlp.ml_reranker import rerank_candidate_dicts
 from backend.services.nlp.engine import generate_suggestions
 from backend.services.nlp.lexical_service import get_lexical_results
 from backend.services.nlp.oneword_service import get_one_word_substitutions
+from backend.services.nlp.runtime_profile import (
+    cross_encoder_enabled_for_task,
+    retrieval_enabled_for_task,
+    semantic_embeddings_enabled_for_task,
+)
 
 
 def test_suggest_runtime_shape_for_blank():
@@ -153,3 +159,36 @@ def test_context_centroid_is_built_lazily(monkeypatch):
     assert set(embeddings_module._context_centroids) == {"formal"}
     assert "hopeful" not in embeddings_module._context_centroids
     assert calls == [["measured", "precise"]]
+
+
+def test_oneword_direct_suffix_seeds_survive_without_wordnet(monkeypatch):
+    monkeypatch.setattr(oneword_service, "get_wordnet", lambda: None)
+    oneword_service._lookup_phobia_candidates.cache_clear()
+    oneword_service._lookup_suffix_candidates.cache_clear()
+
+    heights_results, _ = get_one_word_substitutions("fear of heights", "formal", 5, "advanced")
+    books_results, _ = get_one_word_substitutions("love of books", "formal", 5, "advanced")
+
+    assert heights_results and heights_results[0]["word"] == "acrophobia"
+    assert books_results and books_results[0]["word"] == "bibliophilia"
+
+
+def test_lexical_stays_symbolic_by_default():
+    assert semantic_embeddings_enabled_for_task("lexical") is False
+    assert rerank_candidate_dicts(
+        task="lexical",
+        payload={"word": "sad", "lexical_task": "synonyms", "context": "formal"},
+        candidates=[{"word": "melancholic", "score": 0.82, "reason": "seed"}],
+        text_key="word",
+        score_key="score",
+        max_results=1,
+    ) == [{"word": "melancholic", "score": 0.82, "reason": "seed"}]
+
+
+def test_retrieval_and_cross_encoder_are_suggest_only(monkeypatch):
+    monkeypatch.setenv("WORDCRAFT_ENABLE_RETRIEVAL", "1")
+    assert retrieval_enabled_for_task("suggest_sentence") is True
+    assert retrieval_enabled_for_task("oneword") is False
+    assert retrieval_enabled_for_task("constraints") is False
+    assert cross_encoder_enabled_for_task("suggest_blank") is True
+    assert cross_encoder_enabled_for_task("constraints") is False

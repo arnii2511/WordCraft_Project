@@ -9,8 +9,8 @@ import ToolsHome from './pages/ToolsHome';
 import type { AuthResponse, UserProfile, VocabularyPreference } from './types';
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => authAPI.isAuthenticated());
+  const [user, setUser] = useState<UserProfile | null>(() => authAPI.getProfile());
   const [context, setContext] = useState('neutral');
   const [vocabularyPreference, setVocabularyPreference] =
     useState<VocabularyPreference>('balanced');
@@ -21,16 +21,29 @@ function App() {
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
     if (token) {
+      const cachedProfile = authAPI.getProfile();
+      if (cachedProfile) {
+        setIsAuthenticated(true);
+        setUser(cachedProfile);
+      }
       authAPI
         .getMe()
         .then((profile) => {
           setIsAuthenticated(true);
           setUser(profile);
         })
-        .catch(() => {
-          authAPI.logout();
-          setIsAuthenticated(false);
-          setUser(null);
+        .catch((error) => {
+          const statusCode = error?.response?.status;
+          if (statusCode === 401 || statusCode === 403) {
+            authAPI.logout();
+            setIsAuthenticated(false);
+            setUser(null);
+            return;
+          }
+          if (cachedProfile) {
+            setIsAuthenticated(true);
+            setUser(cachedProfile);
+          }
         });
     }
     const onboarded = localStorage.getItem('wordcraft_onboarded');
