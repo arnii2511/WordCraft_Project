@@ -4,8 +4,12 @@ import re
 from typing import Iterable
 
 from .pipeline import estimate_semantic_drift
-from .runtime_profile import spacy_enabled
 from .wordnet_service import get_wordnet
+
+try:
+    import spacy
+except ImportError:  # pragma: no cover
+    spacy = None
 
 _NLP = None
 
@@ -37,11 +41,7 @@ def _get_spacy():
     global _NLP
     if _NLP is not None:
         return _NLP
-    if not spacy_enabled():
-        return None
-    try:
-        import spacy
-    except ImportError:  # pragma: no cover
+    if spacy is None:
         return None
     try:
         _NLP = spacy.load("en_core_web_sm")

@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import os
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -7,7 +9,6 @@ from .blank_detector import extract_focus_word, preprocess_text
 from .conceptnet_service import get_related_words
 from .emotion_service import emotion_score
 from .ranker import BLANK_TOKEN, infer_expected_pos
-from .runtime_profile import conceptnet_runtime_enabled, spacy_enabled
 from .wordnet_service import (
     get_definitions_for_word,
     get_pos_tags,
@@ -17,6 +18,11 @@ from .wordnet_service import (
     is_valid_word,
     search_definition_entries,
 )
+
+try:
+    import spacy
+except ImportError:  # pragma: no cover
+    spacy = None
 
 _SPACY_NLP = None
 _TOKEN_RE = re.compile(r"[a-zA-Z][a-zA-Z\-']+")
@@ -37,7 +43,8 @@ _IRREGULAR_ADV = {"well", "fast", "hard", "late", "early", "straight", "right", 
 
 
 def _enable_conceptnet_runtime() -> bool:
-    return conceptnet_runtime_enabled(default=False)
+    value = os.getenv("WORDCRAFT_ENABLE_CONCEPTNET_RUNTIME", "0")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 @dataclass
@@ -65,11 +72,7 @@ def _get_spacy():
     global _SPACY_NLP
     if _SPACY_NLP is not None:
         return _SPACY_NLP
-    if not spacy_enabled():
-        return None
-    try:
-        import spacy
-    except ImportError:  # pragma: no cover
+    if spacy is None:
         return None
     try:
         _SPACY_NLP = spacy.load("en_core_web_sm")

@@ -9,7 +9,6 @@ from .context_loader import load_contexts
 from .homonym_service import get_homophones
 from .ml_reranker import rerank_candidate_dicts
 from .rhyme_service import get_rhymes
-from .runtime_profile import semantic_embeddings_enabled_for_task
 from .wordnet_service import (
     estimate_frequency,
     get_antonyms,
@@ -44,15 +43,6 @@ _CURATED_LEXICAL_HINTS: dict[tuple[str, str], list[str]] = {
 }
 
 
-def _definition_tokens(text: str) -> set[str]:
-    tokens = []
-    for part in (text or "").lower().replace("-", " ").split():
-        cleaned = part.strip(".,;:!?()[]{}\"'")
-        if len(cleaned) >= 3:
-            tokens.append(cleaned)
-    return set(tokens)
-
-
 def _cosine_similarity(a: np.ndarray | None, b: np.ndarray | None) -> float:
     if a is None or b is None:
         return 0.0
@@ -84,7 +74,7 @@ def _context_words(context: str | None) -> set[str]:
 def _context_similarity(context: str | None, candidate: str) -> float:
     if not context:
         return 0.0
-    context_vec = embeddings.get_context_centroid(context.strip().lower(), contexts=_CONTEXT_CACHE or {})
+    context_vec = embeddings.get_context_centroid(context.strip().lower())
     candidate_vec = embeddings.get_word_embedding(candidate)
     return _scale(_cosine_similarity(context_vec, candidate_vec))
 
@@ -93,17 +83,6 @@ def _semantic_similarity(base_word: str, candidate: str) -> float:
     base_vec = embeddings.get_word_embedding(base_word)
     cand_vec = embeddings.get_word_embedding(candidate)
     return _scale(_cosine_similarity(base_vec, cand_vec))
-
-
-def _definition_overlap_similarity(base_word: str, definition: str | None) -> float:
-    base_defs = get_definitions_for_word(base_word, max_results=4)
-    base_tokens = set().union(*(_definition_tokens(item) for item in base_defs)) if base_defs else set()
-    candidate_tokens = _definition_tokens(definition or "")
-    if not base_tokens or not candidate_tokens:
-        return 0.46
-    overlap = len(base_tokens & candidate_tokens) / max(1, len(base_tokens))
-    precision = len(base_tokens & candidate_tokens) / max(1, len(candidate_tokens))
-    return min(0.88, 0.38 + 0.3 * overlap + 0.18 * precision)
 
 
 def _reason_for(
@@ -262,7 +241,6 @@ def _rank_candidates(
     vocabulary_preference: str = "balanced",
 ) -> list[dict]:
     context_vocab = _context_words(context)
-    use_semantic_embeddings = semantic_embeddings_enabled_for_task("lexical")
     candidate_list = [candidate for candidate in candidates]
     order_index = {candidate: index for index, candidate in enumerate(candidate_list)}
     base_pos = get_primary_pos(base_word)
@@ -273,12 +251,8 @@ def _rank_candidates(
             continue
         definitions = get_definitions_for_word(cleaned, max_results=1)
         definition = definitions[0] if definitions else None
-        semantic = (
-            _semantic_similarity(base_word, cleaned)
-            if use_semantic_embeddings
-            else _definition_overlap_similarity(base_word, definition)
-        )
-        context_fit = _context_similarity(context, cleaned) if use_semantic_embeddings else 0.0
+        semantic = _semantic_similarity(base_word, cleaned)
+        context_fit = _context_similarity(context, cleaned)
         if cleaned in context_vocab:
             context_fit = max(context_fit, 0.66)
         frequency = estimate_frequency(cleaned)

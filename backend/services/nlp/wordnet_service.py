@@ -6,10 +6,6 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Iterable
 
-from .runtime_profile import is_free_host_profile
-
-_WORDNET_DOWNLOAD_ATTEMPTED = False
-
 _WORD_RE = re.compile(r"^[a-zA-Z][a-zA-Z\-]*$")
 STOPWORDS = {
     "the",
@@ -42,26 +38,14 @@ class LexicalEntry:
 
 
 def get_wordnet():
-    global _WORDNET_DOWNLOAD_ATTEMPTED
     try:
-        import nltk
         from nltk.corpus import wordnet as wn
     except ImportError:
         return None
     try:
         wn.synsets("test")
     except LookupError:
-        if is_free_host_profile():
-            return None
-        if _WORDNET_DOWNLOAD_ATTEMPTED:
-            return None
-        _WORDNET_DOWNLOAD_ATTEMPTED = True
-        try:
-            nltk.download("wordnet", quiet=True)
-            nltk.download("omw-1.4", quiet=True)
-            wn.synsets("test")
-        except Exception:
-            return None
+        return None
     return wn
 
 

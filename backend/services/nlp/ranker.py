@@ -6,7 +6,6 @@ import numpy as np
 
 from . import embeddings
 from . import wordnet_service
-from .runtime_profile import spacy_enabled
 
 BLANK_TOKEN = "[BLANK]"
 BLANK_PLACEHOLDER = "BLANKTOKEN"
@@ -72,6 +71,11 @@ _DETERMINERS = {
 }
 _PREPOSITIONS = {"in", "on", "at", "into", "with", "by", "for", "from", "to", "of", "over", "under"}
 
+try:
+    import spacy
+except ImportError:  # pragma: no cover
+    spacy = None
+
 _SPACY_NLP = None
 
 
@@ -79,11 +83,7 @@ def _get_spacy():
     global _SPACY_NLP
     if _SPACY_NLP is not None:
         return _SPACY_NLP
-    if not spacy_enabled():
-        return None
-    try:
-        import spacy
-    except ImportError:  # pragma: no cover
+    if spacy is None:
         return None
     try:
         _SPACY_NLP = spacy.load("en_core_web_sm")

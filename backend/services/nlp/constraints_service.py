@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import os
 import re
 
 import numpy as np
@@ -7,7 +9,6 @@ from . import embeddings
 from .conceptnet_service import get_related_words
 from .context_loader import load_contexts
 from .ml_reranker import rerank_candidate_dicts
-from .runtime_profile import conceptnet_runtime_enabled, semantic_embeddings_enabled_for_task
 from .wordnet_service import (
     get_antonyms,
     estimate_frequency,
@@ -45,17 +46,9 @@ _CANONICAL_ANTONYM_HINTS = {
 }
 
 
-def _definition_tokens(text: str) -> set[str]:
-    tokens = []
-    for part in (text or "").lower().replace("-", " ").split():
-        cleaned = part.strip(".,;:!?()[]{}\"'")
-        if len(cleaned) >= 3:
-            tokens.append(cleaned)
-    return set(tokens)
-
-
 def _enable_conceptnet_runtime() -> bool:
-    return conceptnet_runtime_enabled(default=False)
+    value = os.getenv("WORDCRAFT_ENABLE_CONCEPTNET_RUNTIME", "0")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _clean_word(word: str) -> str:
@@ -219,22 +212,10 @@ def _semantic_similarity(word: str, target: str) -> float:
     return _scale(_cosine_similarity(wv, tv))
 
 
-def _definition_similarity(word: str, target: str) -> float:
-    target_defs = get_definitions_for_word(target, max_results=4)
-    word_defs = get_definitions_for_word(word, max_results=4)
-    target_tokens = set().union(*(_definition_tokens(item) for item in target_defs)) if target_defs else set()
-    word_tokens = set().union(*(_definition_tokens(item) for item in word_defs)) if word_defs else set()
-    if not target_tokens or not word_tokens:
-        return 0.42
-    overlap = len(target_tokens & word_tokens) / max(1, len(target_tokens))
-    precision = len(target_tokens & word_tokens) / max(1, len(word_tokens))
-    return min(0.86, 0.34 + 0.34 * overlap + 0.18 * precision)
-
-
 def _context_similarity(word: str, context: str | None) -> float:
     if not context:
         return 0.0
-    cv = embeddings.get_context_centroid(context.strip().lower(), contexts=_CONTEXT_CACHE or {})
+    cv = embeddings.get_context_centroid(context.strip().lower())
     wv = embeddings.get_word_embedding(word)
     return _scale(_cosine_similarity(cv, wv))
 
@@ -401,7 +382,6 @@ def get_constraint_matches(
     rhyme_from_relation = _collect_rhyme_expansion(meaning_candidates)
     rhyme_set = set(rhyme_candidates)
     context_words = _get_context_words(context)
-    use_semantic_embeddings = semantic_embeddings_enabled_for_task("constraints")
 
     exact_matches = list(dict.fromkeys([word for word in rhyme_candidates if word in meaning_candidates]))
     if rhyme_base in meaning_candidates and rhyme_base not in exact_matches:
@@ -439,18 +419,14 @@ def get_constraint_matches(
         relation_match = candidate in meaning_candidates
         near_relation_match = candidate in semantic_expansion and not relation_match
         rhyme_score = _rhyme_quality(candidate, rhyme_base) if rhyme_base else 0.0
-        semantic = (
-            (_semantic_similarity(candidate, meaning_base) if meaning_base else 0.0)
-            if use_semantic_embeddings
-            else (_definition_similarity(candidate, meaning_base) if meaning_base else 0.0)
-        )
+        semantic = _semantic_similarity(candidate, meaning_base) if meaning_base else 0.0
         if relation_match:
             relation_score = 1.0
         elif near_relation_match:
             relation_score = max(0.72, semantic)
         else:
             relation_score = semantic
-        context_score = _context_similarity(candidate, context) if use_semantic_embeddings else 0.0
+        context_score = _context_similarity(candidate, context)
         if candidate in context_words:
             context_score = max(context_score, 0.68)
         frequency = estimate_frequency(candidate)
