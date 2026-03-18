@@ -6,12 +6,3 @@ python-dotenv
 passlib[bcrypt]
 python-jose[cryptography]
 dnspython
-sentence-transformers
-spacy
-nltk
-numpy
-scipy
-scikit-learn
-requests
-pronouncing
-pytest

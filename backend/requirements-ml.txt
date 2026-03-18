@@ -1,11 +1,7 @@
 fastapi
 uvicorn
 pydantic
-motor
 python-dotenv
-passlib[bcrypt]
-python-jose[cryptography]
-dnspython
 sentence-transformers
 spacy
 nltk
@@ -14,4 +10,3 @@ scipy
 scikit-learn
 requests
 pronouncing
-pytest
