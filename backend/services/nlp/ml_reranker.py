@@ -13,6 +13,7 @@ import numpy as np
 from backend.ml.retrieval import retrieve_candidates
 from backend.services.nlp import embeddings
 from backend.services.nlp.context_loader import load_contexts
+from backend.services.nlp.runtime_profile import cross_encoder_enabled, retrieval_enabled
 
 DEFAULT_ARTIFACT = "backend/ml/models/reranker.pkl"
 DEFAULT_BEHAVIOR_PRIORS = "backend/ml/models/behavior_priors.json"
@@ -129,6 +130,8 @@ def _prob_to_score(probabilities: np.ndarray, classes: np.ndarray) -> np.ndarray
 
 
 def _cross_encoder_scores(artifact: dict[str, Any], texts: list[str]) -> np.ndarray:
+    if not cross_encoder_enabled():
+        raise RuntimeError("cross-encoder disabled for current runtime profile")
     model_path = artifact.get("model_path")
     if not model_path:
         raise ValueError("cross-encoder artifact missing model_path")
@@ -298,7 +301,7 @@ def rerank_candidate_dicts(
     if _truthy_env(os.getenv("WORDCRAFT_DISABLE_RERANKER")):
         return candidates[:max_results] if max_results else candidates
 
-    if _truthy_env(os.getenv("WORDCRAFT_ENABLE_RETRIEVAL", "0")):
+    if retrieval_enabled():
         candidates = _merge_retrieval_candidates(
             task=task,
             payload=payload,

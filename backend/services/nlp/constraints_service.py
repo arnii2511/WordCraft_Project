@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-import os
 import re
 
 import numpy as np
@@ -9,6 +7,7 @@ from . import embeddings
 from .conceptnet_service import get_related_words
 from .context_loader import load_contexts
 from .ml_reranker import rerank_candidate_dicts
+from .runtime_profile import conceptnet_runtime_enabled
 from .wordnet_service import (
     get_antonyms,
     estimate_frequency,
@@ -47,8 +46,7 @@ _CANONICAL_ANTONYM_HINTS = {
 
 
 def _enable_conceptnet_runtime() -> bool:
-    value = os.getenv("WORDCRAFT_ENABLE_CONCEPTNET_RUNTIME", "0")
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+    return conceptnet_runtime_enabled(default=False)
 
 
 def _clean_word(word: str) -> str:

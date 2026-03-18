@@ -4,6 +4,7 @@ import re
 from typing import Iterable
 
 from .pipeline import estimate_semantic_drift
+from .runtime_profile import spacy_enabled
 from .wordnet_service import get_wordnet
 
 try:
@@ -41,6 +42,8 @@ def _get_spacy():
     global _NLP
     if _NLP is not None:
         return _NLP
+    if not spacy_enabled():
+        return None
     if spacy is None:
         return None
     try:

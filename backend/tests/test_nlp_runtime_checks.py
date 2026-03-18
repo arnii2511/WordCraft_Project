@@ -78,3 +78,31 @@ def test_oneword_runtime_shape():
         assert item.get("word")
         assert isinstance(item.get("score"), float)
         assert item.get("reason")
+
+
+def test_free_host_profile_limits_rewrite_variants(monkeypatch):
+    monkeypatch.setenv("WORDCRAFT_ML_PROFILE", "free")
+    payload = generate_suggestions(
+        "The moon rose over the town.",
+        "nostalgia",
+        mode="rewrite",
+        trigger="button",
+    )
+    assert payload.get("rewrites"), "Rewrite should still be available on free-host profile"
+    assert len(payload.get("rewrites", [])) <= 1
+
+
+def test_free_host_profile_disables_transformers(monkeypatch):
+    monkeypatch.setenv("WORDCRAFT_ML_PROFILE", "free")
+    import backend.services.nlp.embeddings as embeddings_module
+
+    embeddings_module._model = None
+    assert embeddings_module.load_model() is None
+
+
+def test_free_host_profile_disables_retrieval(monkeypatch):
+    monkeypatch.setenv("WORDCRAFT_ML_PROFILE", "free")
+    monkeypatch.setenv("WORDCRAFT_ENABLE_RETRIEVAL", "1")
+    import backend.ml.retrieval as retrieval_module
+
+    assert retrieval_module._is_enabled() is False

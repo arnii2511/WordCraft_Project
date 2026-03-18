@@ -10,6 +10,7 @@ import numpy as np
 
 from backend.ml.scripts.common import build_input_text, load_jsonl, normalize_text
 from backend.services.nlp import embeddings
+from backend.services.nlp.runtime_profile import retrieval_enabled
 
 try:  # pragma: no cover
     import faiss  # type: ignore
@@ -36,7 +37,7 @@ def _truthy(value: str | None) -> bool:
 
 
 def _is_enabled() -> bool:
-    return _truthy(os.getenv("WORDCRAFT_ENABLE_RETRIEVAL", "0"))
+    return retrieval_enabled()
 
 
 def _candidate_text(candidate: dict[str, Any]) -> str:

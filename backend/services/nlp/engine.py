@@ -8,6 +8,7 @@ from .context_loader import load_contexts
 from .emotion_service import load_lexicon
 from .ml_reranker import rerank_candidate_dicts
 from .pipeline import build_pipeline
+from .runtime_profile import rewrite_variant_limit
 from .rewrite_service import is_sentence_complete, rewrite_variants
 
 logger = logging.getLogger(__name__)
@@ -168,6 +169,7 @@ def generate_suggestions(
         blank_present=blank_present,
         allow_rewrite=allow_rewrite,
         suggestions=top_words,
+        max_variants=rewrite_variant_limit(3),
     )
     rewrite_text = rewrite_candidates[0] if rewrite_candidates else ""
 

@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-import os
 import re
 from functools import lru_cache
 from dataclasses import dataclass
@@ -12,6 +10,7 @@ from . import embeddings
 from .conceptnet_service import get_related_words
 from .context_loader import load_contexts
 from .ml_reranker import rerank_candidate_dicts
+from .runtime_profile import conceptnet_runtime_enabled
 from .wordnet_service import estimate_frequency, get_primary_pos, get_wordnet, is_valid_word, search_definition_entries
 
 _TOKEN_RE = re.compile(r"[a-zA-Z][a-zA-Z\-']+")
@@ -124,8 +123,7 @@ _DIRECT_QUERY_ALIASES = {
 
 
 def _enable_conceptnet_runtime() -> bool:
-    value = os.getenv("WORDCRAFT_ENABLE_CONCEPTNET_RUNTIME", "0")
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+    return conceptnet_runtime_enabled(default=False)
 
 
 @dataclass

@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+python-dotenv
+nltk
+numpy
+scipy
+scikit-learn
+requests
+pronouncing

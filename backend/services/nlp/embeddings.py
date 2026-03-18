@@ -6,6 +6,8 @@ from typing import Iterable
 
 import numpy as np
 
+from .runtime_profile import transformers_enabled
+
 DEFAULT_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
 try:
@@ -41,6 +43,8 @@ def load_model(model_name: str = DEFAULT_MODEL_NAME):
     global _model, _model_device
     if _model is not None:
         return _model
+    if not transformers_enabled():
+        return None
     if SentenceTransformer is None:
         return None
     try:

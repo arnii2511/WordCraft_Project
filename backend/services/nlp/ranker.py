@@ -6,6 +6,7 @@ import numpy as np
 
 from . import embeddings
 from . import wordnet_service
+from .runtime_profile import spacy_enabled
 
 BLANK_TOKEN = "[BLANK]"
 BLANK_PLACEHOLDER = "BLANKTOKEN"
@@ -83,6 +84,8 @@ def _get_spacy():
     global _SPACY_NLP
     if _SPACY_NLP is not None:
         return _SPACY_NLP
+    if not spacy_enabled():
+        return None
     if spacy is None:
         return None
     try:
