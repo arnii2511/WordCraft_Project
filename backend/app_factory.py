@@ -88,6 +88,48 @@ def create_ml_app() -> FastAPI:
     return app
 
 
+def create_lexical_app() -> FastAPI:
+    from .api.constraints_routes import router as constraints_router
+    from .api.lexical_routes import router as lexical_router
+    from .api.oneword_routes import router as oneword_router
+
+    app = FastAPI(title="WordCraft Lexical API", version="0.1.0")
+    _apply_common_middleware(app)
+
+    app.include_router(lexical_router)
+    app.include_router(constraints_router)
+    app.include_router(oneword_router)
+
+    @app.get("/health")
+    async def health_check():
+        return {"status": "ok", "service": "lexical"}
+
+    @app.get("/")
+    async def root():
+        return {"service": "WordCraft Lexical API", "status": "ok", "health": "/health"}
+
+    return app
+
+
+def create_editor_app() -> FastAPI:
+    from .api.suggestion_routes import router as suggestion_router
+
+    app = FastAPI(title="WordCraft Editor API", version="0.1.0")
+    _apply_common_middleware(app)
+
+    app.include_router(suggestion_router)
+
+    @app.get("/health")
+    async def health_check():
+        return {"status": "ok", "service": "editor"}
+
+    @app.get("/")
+    async def root():
+        return {"service": "WordCraft Editor API", "status": "ok", "health": "/health"}
+
+    return app
+
+
 def create_monolith_app() -> FastAPI:
     from .api.auth_routes import router as auth_router
     from .api.constraints_routes import router as constraints_router

@@ -18,6 +18,8 @@ import type {
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const CORE_API_BASE_URL = import.meta.env.VITE_CORE_API_URL || API_BASE_URL;
 const ML_API_BASE_URL = import.meta.env.VITE_ML_API_URL || API_BASE_URL;
+const LEXICAL_API_BASE_URL = import.meta.env.VITE_LEXICAL_API_URL || ML_API_BASE_URL;
+const EDITOR_API_BASE_URL = import.meta.env.VITE_EDITOR_API_URL || ML_API_BASE_URL;
 
 const corePublicApi = axios.create({
   baseURL: CORE_API_BASE_URL,
@@ -25,6 +27,14 @@ const corePublicApi = axios.create({
 
 const mlPublicApi = axios.create({
   baseURL: ML_API_BASE_URL,
+});
+
+const lexicalPublicApi = axios.create({
+  baseURL: LEXICAL_API_BASE_URL,
+});
+
+const editorPublicApi = axios.create({
+  baseURL: EDITOR_API_BASE_URL,
 });
 
 const protectedCoreApi = axios.create({
@@ -123,7 +133,7 @@ export const writingAPI = {
     trigger: 'auto' | 'button',
     vocabularyPreference: VocabularyPreference = 'balanced',
   ): Promise<SuggestResponse> => {
-    const response = await mlPublicApi.post<SuggestResponse>('/suggest', {
+    const response = await editorPublicApi.post<SuggestResponse>('/suggest', {
       sentence,
       context,
       mode,
@@ -143,7 +153,7 @@ export const lexicalAPI = {
     context?: string,
     vocabularyPreference: VocabularyPreference = 'balanced',
   ): Promise<LexicalResponse> => {
-    const response = await mlPublicApi.post<LexicalResponse>('/lexical', {
+    const response = await lexicalPublicApi.post<LexicalResponse>('/lexical', {
       word,
       task,
       context,
@@ -162,7 +172,7 @@ export const constraintsAPI = {
     limit?: number;
     vocabulary_preference?: VocabularyPreference;
   }): Promise<ConstraintResponse> => {
-    const response = await mlPublicApi.post<ConstraintResponse>('/constraints', payload);
+    const response = await lexicalPublicApi.post<ConstraintResponse>('/constraints', payload);
     return response.data;
   },
 };
@@ -174,7 +184,7 @@ export const onewordAPI = {
     limit?: number;
     vocabulary_preference?: VocabularyPreference;
   }): Promise<OneWordResponse> => {
-    const response = await mlPublicApi.post<OneWordResponse>('/oneword', payload);
+    const response = await lexicalPublicApi.post<OneWordResponse>('/oneword', payload);
     return response.data;
   },
 };
