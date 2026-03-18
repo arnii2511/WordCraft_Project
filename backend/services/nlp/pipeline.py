@@ -18,11 +18,6 @@ from .wordnet_service import (
     search_definition_entries,
 )
 
-try:
-    import spacy
-except ImportError:  # pragma: no cover
-    spacy = None
-
 _SPACY_NLP = None
 _TOKEN_RE = re.compile(r"[a-zA-Z][a-zA-Z\-']+")
 
@@ -72,7 +67,9 @@ def _get_spacy():
         return _SPACY_NLP
     if not spacy_enabled():
         return None
-    if spacy is None:
+    try:
+        import spacy
+    except ImportError:  # pragma: no cover
         return None
     try:
         _SPACY_NLP = spacy.load("en_core_web_sm")

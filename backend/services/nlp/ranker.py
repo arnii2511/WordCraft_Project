@@ -72,11 +72,6 @@ _DETERMINERS = {
 }
 _PREPOSITIONS = {"in", "on", "at", "into", "with", "by", "for", "from", "to", "of", "over", "under"}
 
-try:
-    import spacy
-except ImportError:  # pragma: no cover
-    spacy = None
-
 _SPACY_NLP = None
 
 
@@ -86,7 +81,9 @@ def _get_spacy():
         return _SPACY_NLP
     if not spacy_enabled():
         return None
-    if spacy is None:
+    try:
+        import spacy
+    except ImportError:  # pragma: no cover
         return None
     try:
         _SPACY_NLP = spacy.load("en_core_web_sm")
