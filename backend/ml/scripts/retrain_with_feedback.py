@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from .build_behavior_priors import build_behavior_priors
 from .eval_reranker import evaluate
 from .export_feedback_dataset import export_feedback_dataset
 from .split_dataset import split_dataset
@@ -13,6 +14,7 @@ DEFAULT_BASE_DATASET = "backend/ml/data/dataset_ranker.jsonl"
 DEFAULT_FEEDBACK_OUTPUT = "backend/ml/data/dataset_feedback.jsonl"
 DEFAULT_SPLIT_DIR = "backend/ml/data/splits"
 DEFAULT_ARTIFACT = "backend/ml/models/reranker.pkl"
+DEFAULT_BEHAVIOR_PRIORS = "backend/ml/models/behavior_priors.json"
 
 
 def run(args: argparse.Namespace) -> None:
@@ -27,6 +29,7 @@ def run(args: argparse.Namespace) -> None:
         seed=args.seed,
         regression_size=max(50, args.regression_size),
         split_mode=args.split_mode,
+        stratify_by_task=not args.no_stratify_by_task,
     )
 
     train_path = str(Path(args.split_dir) / "train.jsonl")
@@ -57,6 +60,12 @@ def run(args: argparse.Namespace) -> None:
         exclude_gold_seed=args.exclude_gold_seed,
         task_filter=args.task_filter,
     )
+    if args.build_behavior_priors:
+        print("\nBuilding behavior priors:")
+        build_behavior_priors(
+            output_path=args.behavior_priors_output,
+            smoothing_alpha=max(0.1, float(args.behavior_smoothing_alpha)),
+        )
 
 
 def parse_args() -> argparse.Namespace:
@@ -87,6 +96,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42, help="Random seed for split/training.")
     parser.add_argument("--regression-size", type=int, default=200, help="Regression set rows.")
     parser.add_argument(
+        "--no-stratify-by-task",
+        action="store_true",
+        help="Disable task-stratified split (enabled by default).",
+    )
+    parser.add_argument(
         "--exclude-gold-seed",
         action="store_true",
         help="Exclude source=gold_seed rows in train/eval for strict realism.",
@@ -96,6 +110,22 @@ def parse_args() -> argparse.Namespace:
         choices=["non_rewrite", "rewrite", "all"],
         default="non_rewrite",
         help="Evaluation/test task slice. non_rewrite is recommended for lexical ranker tracking.",
+    )
+    parser.add_argument(
+        "--build-behavior-priors",
+        action="store_true",
+        help="Build behavior priors JSON from feedback events after retrain.",
+    )
+    parser.add_argument(
+        "--behavior-priors-output",
+        default=DEFAULT_BEHAVIOR_PRIORS,
+        help="Output path for behavior priors JSON artifact.",
+    )
+    parser.add_argument(
+        "--behavior-smoothing-alpha",
+        type=float,
+        default=6.0,
+        help="Bayesian smoothing alpha used in behavior priors.",
     )
     return parser.parse_args()
 

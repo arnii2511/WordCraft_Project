@@ -12,6 +12,7 @@ async def oneword_endpoint(payload: OneWordRequest):
         query=payload.query,
         context=payload.context,
         limit=payload.limit,
+        vocabulary_preference=payload.vocabulary_preference,
     )
     return {
         "query": payload.query,

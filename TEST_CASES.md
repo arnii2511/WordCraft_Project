@@ -425,3 +425,190 @@ Run:
 ```bash
 python -m pytest backend/tests
 ```
+
+---
+
+## 13) Filled Targeted Eval Sheet (Current Engine Snapshot)
+
+This section captures a concrete March 18, 2026 snapshot of the current service-layer behavior for 20 representative prompts.
+
+Notes:
+- Snapshot was generated from the local backend service functions in the repo.
+- Because model-network access was blocked during capture, the run used the built-in offline embedding fallback path.
+- This makes the sheet useful for failure targeting, but exact rankings may shift slightly on a fully warmed local runtime with the dense embedding model loaded.
+
+==================================================
+ONE-WORD SUBSTITUTION
+==================================================
+
+1. Feature: One-Word  
+Input: `fear of crowds`  
+Context: `formal`  
+Vocabulary: `advanced`  
+Got: `enochlophobia`, `revere`, `venerate`, `esteem`, `prise`  
+Expected: `enochlophobia`, `ochlophobia`, `agoraphobia`  
+Why wrong: Top-1 is strong, but the tail collapses into unrelated reverence/love words instead of staying inside the phobia family.
+
+2. Feature: One-Word  
+Input: `fear of open spaces`  
+Context: `formal`  
+Vocabulary: `advanced`  
+Got: `agoraphobia`, `revere`, `venerate`, `clear`, `expanse`  
+Expected: `agoraphobia`  
+Why wrong: The lead result is correct, but the fallback pool leaks unrelated semantic neighbors instead of remaining tightly diagnostic.
+
+3. Feature: One-Word  
+Input: `love of knowledge`  
+Context: `formal`  
+Vocabulary: `advanced`  
+Got: `mate`, `passion`, `beloved`, `object`, `noesis`  
+Expected: `philomathy`, `epistemophilia`, `sapiophilia`  
+Why wrong: It misses the technical single-word target and drifts into generic affection words plus one abstract cognition term.
+
+4. Feature: One-Word  
+Input: `hatred of mankind`  
+Context: `formal`  
+Vocabulary: `advanced`  
+Got: `misanthropy`, `egalitarianism`, `agape`, `lucifer`, `genie`  
+Expected: `misanthropy`, `misanthropism`  
+Why wrong: Top-1 is correct, but the remaining list becomes noisy and semantically unstable instead of staying close to hatred/aversion vocabulary.
+
+5. Feature: One-Word  
+Input: `a person who talks too much`  
+Context: `formal`  
+Vocabulary: `advanced`  
+Got: `sweater`, `hater`, `singer`, `vocalist`, `buyer`  
+Expected: `chatterbox`, `blabbermouth`, `windbag`, `motor-mouth`, `gossip`  
+Why wrong: Strong failure. The system is overfitting to person-like suffixes instead of actual communicative behavior.
+
+6. Feature: One-Word  
+Input: `the quality of being stubborn`  
+Context: `formal`  
+Vocabulary: `advanced`  
+Got: `wickedness`, `individuality`, `truthfulness`, `superiority`, `sanctity`  
+Expected: `obstinacy`, `obduracy`, `stubbornness`, `intransigence`  
+Why wrong: Strong failure. It recognizes the abstract-noun pattern but not the actual meaning.
+
+==================================================
+SMART MATCH
+==================================================
+
+7. Feature: Smart Match  
+Input: `rhyme_with=night`, `relation=synonym`, `meaning_target=bright`  
+Context: `formal`  
+Vocabulary: `advanced`  
+Got: `bright`, `light`  
+Expected: `bright`, `light`  
+Why wrong: No major issue. This is one of the cleaner current Smart Match cases.
+
+8. Feature: Smart Match  
+Input: `rhyme_with=cold`, `relation=antonym`, `meaning_target=warm`  
+Context: `formal`  
+Vocabulary: `advanced`  
+Got: `bold`, `withhold`, `mold`  
+Expected: `cold` as the clear exact match, or a very explicit “no exact alternative beyond cold” fallback note  
+Why wrong: It misses the exact antonym-rhyme anchor and falls into rhyme-only noise.
+
+9. Feature: Smart Match  
+Input: `rhyme_with=fire`, `relation=synonym`, `meaning_target=desire`  
+Context: `formal`  
+Vocabulary: `advanced`  
+Got: `desire`, `require`  
+Expected: `desire`, then perhaps `aspire`/`admire` only if relation logic justifies them  
+Why wrong: Usable top-1, but the tail still prefers rhyme convenience over clean semantic alignment.
+
+10. Feature: Smart Match  
+Input: `rhyme_with=grief`, `relation=synonym`, `meaning_target=belief`  
+Context: `formal`  
+Vocabulary: `advanced`  
+Got: `belief`  
+Expected: `belief`  
+Why wrong: No major issue. Sparse, but correct.
+
+11. Feature: Smart Match  
+Input: `rhyme_with=stone`, `relation=antonym`, `meaning_target=soft`  
+Context: `formal`  
+Vocabulary: `advanced`  
+Got: `bone`, `shone`, `postpone`  
+Expected: A strong fallback note with either no results or much tighter meaning-preserving best effort  
+Why wrong: The current output feels rhyme-led rather than relation-led.
+
+==================================================
+LEXICAL TOOLS
+==================================================
+
+12. Feature: Synonyms  
+Input: `sad`  
+Context: `formal`  
+Vocabulary: `advanced`  
+Got: `deplorable`, `unhappy`, `distressing`, `sorry`, `weeping`  
+Expected: `sorrowful`, `melancholy`, `dejected`, `unhappy`, `mournful`  
+Why wrong: It mixes multiple senses of “sad”; `deplorable` is a valid sense but not the most useful writer-facing top result here.
+
+13. Feature: Antonyms  
+Input: `warm`  
+Context: `formal`  
+Vocabulary: `advanced`  
+Got: `improve`, `borrow`, `love`, `shed`, `cool`  
+Expected: `cold`, `cool`, `chilly`  
+Why wrong: Strong failure from WordNet sense drift. Verb/object antonyms are outranking the temperature sense.
+
+14. Feature: Rhymes  
+Input: `light`  
+Context: `formal`  
+Vocabulary: `advanced`  
+Got: `alright`, `bright`, `alight`, `bite`, `blight`  
+Expected: `bright`, `night`, `sight`, `slight`, `blight`  
+Why wrong: `alright` is not the best lead for a polished writing tool, especially in formal/advanced mode.
+
+15. Feature: Homonyms  
+Input: `flower`  
+Context: `formal`  
+Vocabulary: `advanced`  
+Got: `flour`  
+Expected: `flour`  
+Why wrong: No issue. This is a clean correct case.
+
+==================================================
+EDITOR DRAFT / POLISH / TRANSFORM
+==================================================
+
+16. Feature: Editor Draft  
+Input: `The room felt ____ and silent.`  
+Context: `mysterious`  
+Vocabulary: `advanced`  
+Got: `silent`, `elusive`, `enigmatic`, `cryptic`, `veiled`  
+Expected: `eerie`, `hushed`, `still`, `ominous`, `uncanny`  
+Why wrong: `silent` duplicates existing context and several candidates are conceptually abstract instead of atmosphere-setting room adjectives.
+
+17. Feature: Editor Draft  
+Input: `He walked ____ into the chapel.`  
+Context: `formal`  
+Vocabulary: `advanced`  
+Got: `professionally`, `officially`, `ceremonially`, `courteously`, `measuredly`  
+Expected: `solemnly`, `reverently`, `quietly`, `gravely`, `measuredly`  
+Why wrong: It recognizes the adverb slot, but confuses institutional formality with chapel-appropriate reverence.
+
+18. Feature: Editor Polish  
+Input: `Her words were very good and made everyone feel things deeply.`  
+Context: `formal`  
+Vocabulary: `advanced`  
+Got: `falsity`, `proclamation`, `announcement`, `illumination`, `parlance`  
+Expected: A stronger rewrite and/or words like `moving`, `poignant`, `affecting`, `resonant`  
+Why wrong: Strong failure. Suggestions are wrong POS and unrelated to the communicative effect being edited.
+
+19. Feature: Editor Polish  
+Input: `The memory stayed with me in a strange way.`  
+Context: `nostalgia`  
+Vocabulary: `advanced`  
+Got: `strange`, `expound`, `memory`, `advantage`, `last`  
+Expected: `hauntingly`, `oddly`, `uncannily`, or a rewrite such as “The memory lingered with me in a haunting way.”  
+Why wrong: Strong failure. It surfaces repeats and unrelated lemmas instead of nostalgic/reflective refinements.
+
+20. Feature: Editor Transform  
+Input: `The letter carried a sad tone through the room.`  
+Context: `melancholic`  
+Vocabulary: `advanced`  
+Got: Suggestions: `sad`, `improvement`, `cipher`, `bow`, `organiser`  
+Expected: Suggestions like `mournful`, `somber`, `elegiac`, plus a richer rewrite  
+Why wrong: The generated rewrite is serviceable, but the supporting lexical suggestions are still largely irrelevant.

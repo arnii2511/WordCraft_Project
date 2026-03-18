@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -9,11 +10,13 @@ from .conceptnet_service import get_related_words
 from .emotion_service import emotion_score
 from .ranker import BLANK_TOKEN, infer_expected_pos
 from .wordnet_service import (
+    get_definitions_for_word,
     get_pos_tags,
     get_derivational_forms,
     get_synonyms,
     get_wordnet,
     is_valid_word,
+    search_definition_entries,
 )
 
 try:
@@ -37,6 +40,11 @@ DRAFT_VERBS = {
     "linger",
 }
 _IRREGULAR_ADV = {"well", "fast", "hard", "late", "early", "straight", "right", "near"}
+
+
+def _enable_conceptnet_runtime() -> bool:
+    value = os.getenv("WORDCRAFT_ENABLE_CONCEPTNET_RUNTIME", "0")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 @dataclass
@@ -222,7 +230,81 @@ def _expand_wordnet(source_map: dict[str, set[str]], terms: list[str], mode: str
                 _add_candidate(source_map, deriv, "derivational")
 
 
+def _expand_wordnet_advanced(source_map: dict[str, set[str]], terms: list[str], mode: str) -> None:
+    for term in terms[:8]:
+        for synonym in get_synonyms([term], max_synonyms_per_word=12):
+            _add_candidate(source_map, synonym, "wordnet")
+            for deriv in get_derivational_forms(synonym, max_results=6):
+                _add_candidate(source_map, deriv, "derivational")
+        if mode in {"write", "rewrite", "edit"}:
+            for deriv in get_derivational_forms(term, max_results=12):
+                _add_candidate(source_map, deriv, "derivational")
+
+
+def _expand_definition_family(
+    source_map: dict[str, set[str]],
+    terms: list[str],
+    *,
+    expected_pos: set[str] | None = None,
+    limit: int = 18,
+) -> None:
+    pos_codes = None
+    if expected_pos:
+        mapping = {"NOUN": "n", "VERB": "v", "ADJ": "a", "ADV": "r"}
+        mapped = {mapping[tag] for tag in expected_pos if tag in mapping}
+        if mapped:
+            pos_codes = mapped
+
+    search_queries: list[str] = []
+    for term in terms[:4]:
+        search_queries.extend(get_definitions_for_word(term, max_results=3))
+    seen_queries: list[str] = []
+    for query in search_queries:
+        if query and query not in seen_queries:
+            seen_queries.append(query)
+
+    for query in seen_queries[:8]:
+        for entry in search_definition_entries(query, require_pos_codes=pos_codes, limit=limit):
+            _add_candidate(source_map, entry.word, "definition")
+
+
+def _expand_selection_definition_family(
+    source_map: dict[str, set[str]],
+    selection_text: str,
+    focus_terms: list[str],
+    *,
+    expected_pos: set[str] | None = None,
+) -> None:
+    pos_codes = None
+    if expected_pos:
+        mapping = {"NOUN": "n", "VERB": "v", "ADJ": "a", "ADV": "r"}
+        mapped = {mapping[tag] for tag in expected_pos if tag in mapping}
+        if mapped:
+            pos_codes = mapped
+
+    search_queries: list[str] = []
+    if selection_text:
+        search_queries.append(selection_text)
+        search_queries.extend(get_definitions_for_word(selection_text, max_results=3))
+
+    for term in focus_terms[:4]:
+        search_queries.append(term)
+        search_queries.extend(get_definitions_for_word(term, max_results=3))
+
+    seen_queries: list[str] = []
+    for query in search_queries:
+        cleaned = (query or "").strip()
+        if cleaned and cleaned not in seen_queries:
+            seen_queries.append(cleaned)
+
+    for query in seen_queries[:12]:
+        for entry in search_definition_entries(query, require_pos_codes=pos_codes, limit=14):
+            _add_candidate(source_map, entry.word, "definition")
+
+
 def _expand_conceptnet(source_map: dict[str, set[str]], terms: list[str], mode: str) -> None:
+    if not _enable_conceptnet_runtime():
+        return
     if mode not in {"write", "rewrite", "transform"}:
         return
     for term in terms[:3]:
@@ -259,19 +341,44 @@ def build_pipeline(
     mode: str,
     contexts: dict[str, dict],
     selection: Any | None = None,
+    vocabulary_preference: str = "balanced",
 ) -> PipelineResult:
     decision = detect_intent(text, selection=selection)
     context_payload = contexts.get(context_key, {})
     context_words = context_payload.get("words", [])
     context_description = context_payload.get("description", "the selected tone")
     source_map: dict[str, set[str]] = {}
+    advanced_mode = (vocabulary_preference or "balanced").strip().lower() == "advanced"
 
     for word in context_words:
         _add_candidate(source_map, word, "context")
 
     if decision.focus_terms:
-        _expand_wordnet(source_map, decision.focus_terms, mode=mode)
+        if advanced_mode:
+            _expand_wordnet_advanced(source_map, decision.focus_terms, mode=mode)
+        else:
+            _expand_wordnet(source_map, decision.focus_terms, mode=mode)
         _expand_conceptnet(source_map, decision.focus_terms, mode=mode)
+        if decision.intent == "selection":
+            _expand_definition_family(
+                source_map,
+                decision.focus_terms,
+                expected_pos=decision.expected_pos,
+                limit=24 if advanced_mode else 18,
+            )
+            _expand_selection_definition_family(
+                source_map,
+                decision.selection_text,
+                decision.focus_terms,
+                expected_pos=decision.expected_pos,
+            )
+        elif decision.intent == "sentence":
+            _expand_definition_family(
+                source_map,
+                decision.focus_terms,
+                expected_pos=None,
+                limit=28 if advanced_mode else 22,
+            )
 
     if decision.intent == "blank":
         for verb in DRAFT_VERBS:

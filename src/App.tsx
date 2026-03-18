@@ -6,12 +6,14 @@ import Login from './components/Login';
 import EditorPage from './pages/EditorPage';
 import ProfilePage from './pages/ProfilePage';
 import ToolsHome from './pages/ToolsHome';
-import type { AuthResponse, UserProfile } from './types';
+import type { AuthResponse, UserProfile, VocabularyPreference } from './types';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [context, setContext] = useState('neutral');
+  const [vocabularyPreference, setVocabularyPreference] =
+    useState<VocabularyPreference>('balanced');
   const [mode, setMode] = useState<'write' | 'edit' | 'rewrite'>('write');
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
@@ -55,13 +57,35 @@ function App() {
     setUser(profile);
   };
 
+  useEffect(() => {
+    if (!showAuth) return;
+    window.history.pushState({ wordcraftAuthModal: true }, '');
+    const handlePopState = () => {
+      setShowAuth(false);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [showAuth]);
+
+  const closeAuthModal = () => {
+    const state = window.history.state as { wordcraftAuthModal?: boolean } | null;
+    if (state?.wordcraftAuthModal) {
+      window.history.back();
+      return;
+    }
+    setShowAuth(false);
+  };
+
   return (
     <div className="app-shell">
       {showAuth && (
         <Login
+          onClose={closeAuthModal}
           onSuccess={(userData: AuthResponse) => {
             handleLogin(userData.user);
-            setShowAuth(false);
+            closeAuthModal();
           }}
         />
       )}
@@ -95,6 +119,8 @@ function App() {
             <ToolsHome
               context={context}
               setContext={setContext}
+              vocabularyPreference={vocabularyPreference}
+              setVocabularyPreference={setVocabularyPreference}
               isAuthenticated={isAuthenticated}
               user={user}
               onRequireAuth={() => setShowAuth(true)}
@@ -107,6 +133,8 @@ function App() {
             <EditorPage
               context={context}
               setContext={setContext}
+              vocabularyPreference={vocabularyPreference}
+              setVocabularyPreference={setVocabularyPreference}
               mode={mode}
               setMode={setMode}
               user={user}

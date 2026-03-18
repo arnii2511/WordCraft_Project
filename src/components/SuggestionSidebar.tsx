@@ -1,6 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { favoritesAPI, feedbackAPI } from '../services/api';
-import type { FeedbackTask, SelectionPayload, SuggestionItem } from '../types';
+import type {
+  FeedbackTask,
+  SelectionPayload,
+  SuggestionItem,
+  VocabularyPreference,
+} from '../types';
 
 interface SuggestionSidebarProps {
   suggestions?: SuggestionItem[];
@@ -17,6 +22,8 @@ interface SuggestionSidebarProps {
   selection?: SelectionPayload | null;
   context?: string;
   onContextChange?: (value: string) => void;
+  vocabularyPreference?: VocabularyPreference;
+  onVocabularyPreferenceChange?: (value: VocabularyPreference) => void;
 }
 
 const SuggestionSidebar = ({
@@ -34,6 +41,8 @@ const SuggestionSidebar = ({
   selection,
   context = 'neutral',
   onContextChange = () => {},
+  vocabularyPreference = 'balanced',
+  onVocabularyPreferenceChange = () => {},
 }: SuggestionSidebarProps) => {
   const [savedWords, setSavedWords] = useState<string[]>([]);
   const [savedRewrites, setSavedRewrites] = useState<string[]>([]);
@@ -51,6 +60,7 @@ const SuggestionSidebar = ({
     'mysterious',
     'formal',
   ];
+  const vocabularyOptions: VocabularyPreference[] = ['balanced', 'advanced'];
 
   const topWord = suggestions[0]?.word || '';
   const selectionWord = selection?.text?.split(/\s+/)[0] || '';
@@ -90,6 +100,16 @@ const SuggestionSidebar = ({
     }
     return 'Write something in the editor to see suggestions.';
   }, [selectionWord, mode, detectedBlank]);
+
+  const issueDetectedLabel = useMemo(() => {
+    if (selection?.text?.trim()) {
+      return `Issue detected in "${selection.text.trim()}"`;
+    }
+    if (original?.trim()) {
+      return 'Issue detected in current sentence';
+    }
+    return 'Issue detected';
+  }, [selection, original]);
 
   const highlightWord = (text: string, word: string) => {
     if (!text || !word) return text;
@@ -145,6 +165,7 @@ const SuggestionSidebar = ({
         rating,
         context,
         mode,
+        vocabulary_preference: vocabularyPreference,
         source: extra.source || 'ui',
         session_id: sessionId,
         ...extra,
@@ -213,19 +234,36 @@ const SuggestionSidebar = ({
   return (
     <aside className="right-panel">
       <div className="panel-card">
-        <label className="tool-context-field panel-context-field">
-          Tone / Context
-          <select
-            value={context}
-            onChange={(event) => onContextChange(event.target.value)}
-          >
-            {contexts.map((ctx) => (
-              <option key={ctx} value={ctx}>
-                {ctx.charAt(0).toUpperCase() + ctx.slice(1)}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="context-controls-row">
+          <label className="tool-context-field panel-context-field">
+            Tone / Context
+            <select
+              value={context}
+              onChange={(event) => onContextChange(event.target.value)}
+            >
+              {contexts.map((ctx) => (
+                <option key={ctx} value={ctx}>
+                  {ctx.charAt(0).toUpperCase() + ctx.slice(1)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="tool-context-field panel-context-field">
+            Vocabulary
+            <select
+              value={vocabularyPreference}
+              onChange={(event) =>
+                onVocabularyPreferenceChange(event.target.value as VocabularyPreference)
+              }
+            >
+              {vocabularyOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option.charAt(0).toUpperCase() + option.slice(1)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         <div className="panel-title">{panelTitle}</div>
         <p className="panel-mode-help">{panelHelp}</p>
@@ -234,7 +272,7 @@ const SuggestionSidebar = ({
           <p className="panel-empty">{emptyState}</p>
         )}
 
-        {(rewrite || rewrites.length > 0 || mode === 'rewrite') && (
+        {mode === 'rewrite' && (
           <div className="rewrite-block">
             <div className="rewrite-title">Rewrite</div>
             {original && (
@@ -387,7 +425,7 @@ const SuggestionSidebar = ({
               </div>
               {mode === 'edit' && (
                 <div className="suggestion-issue">
-                  Issue detected → Fix suggestion
+                  {issueDetectedLabel} → Fix suggestion
                 </div>
               )}
               <div className="suggestion-example">

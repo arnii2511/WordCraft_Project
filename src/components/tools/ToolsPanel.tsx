@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
 import { constraintsAPI, favoritesAPI, feedbackAPI, lexicalAPI, onewordAPI } from '../../services/api';
 import type {
   ConstraintRelation,
@@ -8,6 +9,7 @@ import type {
   LexicalTask,
   OneWordResult,
   SelectionPayload,
+  VocabularyPreference,
 } from '../../types';
 
 interface ToolsPanelProps {
@@ -17,6 +19,8 @@ interface ToolsPanelProps {
   isAuthenticated?: boolean;
   context?: string;
   onContextChange?: (value: string) => void;
+  vocabularyPreference?: VocabularyPreference;
+  onVocabularyPreferenceChange?: (value: VocabularyPreference) => void;
   embedded?: boolean;
   activeTool?: ToolTab;
   onActiveToolChange?: (tool: ToolTab) => void;
@@ -36,6 +40,7 @@ const CONTEXTS = [
   'mysterious',
   'formal',
 ];
+const VOCABULARY_OPTIONS: VocabularyPreference[] = ['balanced', 'advanced'];
 
 const TASK_TAGS: Record<LexicalTask, string> = {
   synonyms: 'SYN',
@@ -85,6 +90,8 @@ const ToolsPanel = ({
   isAuthenticated = false,
   context = 'neutral',
   onContextChange,
+  vocabularyPreference = 'balanced',
+  onVocabularyPreferenceChange,
   embedded = false,
   activeTool: controlledTool,
   onActiveToolChange,
@@ -157,6 +164,7 @@ const ToolsPanel = ({
         candidate,
         rating: 4,
         context,
+        vocabulary_preference: vocabularyPreference,
         source: 'implicit_copy',
         session_id: sessionId,
         reason: options.reason || 'Implicit positive feedback from copy action.',
@@ -262,7 +270,12 @@ const ToolsPanel = ({
     }
     setLoadingLexical(true);
     try {
-      const response = await lexicalAPI.getResults(activeLexicalWord, activeLexicalTask, context);
+      const response = await lexicalAPI.getResults(
+        activeLexicalWord,
+        activeLexicalTask,
+        context,
+        vocabularyPreference,
+      );
       setToolResults(response.results || []);
       const detailsMap: Record<string, LexicalResultDetail> = {};
       for (const detail of response.details || []) {
@@ -293,12 +306,22 @@ const ToolsPanel = ({
         meaning_of: meaningOf.trim(),
         context,
         limit: 10,
+        vocabulary_preference: vocabularyPreference,
       });
       setSmartResults(response.results || []);
       setSmartNote(response.notes || '');
     } catch (error) {
       setSmartResults([]);
-      setSmartNote('Unable to fetch smart match results.');
+      if (axios.isAxiosError(error)) {
+        const detail =
+          (typeof error.response?.data?.notes === 'string' && error.response?.data?.notes) ||
+          (typeof error.response?.data?.detail === 'string' && error.response?.data?.detail) ||
+          (typeof error.message === 'string' && error.message) ||
+          '';
+        setSmartNote(detail || 'Smart Match is temporarily unavailable. Please try again in a moment.');
+      } else {
+        setSmartNote('Smart Match is temporarily unavailable. Please try again in a moment.');
+      }
     } finally {
       setSmartLoading(false);
     }
@@ -317,6 +340,7 @@ const ToolsPanel = ({
         query: oneWordQuery.trim(),
         context,
         limit: 10,
+        vocabulary_preference: vocabularyPreference,
       });
       setOneWordResults(response.results || []);
       setOneWordNote(response.note || '');
@@ -391,6 +415,7 @@ const ToolsPanel = ({
         candidate,
         rating,
         context,
+        vocabulary_preference: vocabularyPreference,
         source: 'tools_ui',
         session_id: sessionId,
         ...options,
@@ -474,18 +499,37 @@ const ToolsPanel = ({
             <h2 className="tool-panel-title">{toolMeta.title}</h2>
             <p className="tool-panel-help">{toolMeta.help}</p>
           </div>
-          {onContextChange && (
-            <label className="tool-context-field">
-              Tone / Context
-              <select value={context} onChange={(event) => onContextChange(event.target.value)}>
-                {CONTEXTS.map((ctx) => (
-                  <option key={ctx} value={ctx}>
-                    {formatLabel(ctx)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
+          <div className="tool-panel-controls">
+            {onContextChange && (
+              <label className="tool-context-field">
+                Tone / Context
+                <select value={context} onChange={(event) => onContextChange(event.target.value)}>
+                  {CONTEXTS.map((ctx) => (
+                    <option key={ctx} value={ctx}>
+                      {formatLabel(ctx)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {onVocabularyPreferenceChange && (
+              <label className="tool-context-field">
+                Vocabulary
+                <select
+                  value={vocabularyPreference}
+                  onChange={(event) =>
+                    onVocabularyPreferenceChange(event.target.value as VocabularyPreference)
+                  }
+                >
+                  {VOCABULARY_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {formatLabel(option)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
         </div>
 
         {activeTool === 'synonyms' || activeTool === 'rhymes' ? (
@@ -547,13 +591,13 @@ const ToolsPanel = ({
 
             <div className="tool-action-row">
               <button type="button" className="btn-accept" onClick={() => void runLexicalSearch()}>
-                {contrastTask === 'antonyms'
-                  ? 'Get antonyms'
+                {activeTool === 'synonyms'
+                  ? contrastTask === 'antonyms'
+                    ? 'Get antonyms'
+                    : 'Get synonyms'
                   : soundTask === 'homonyms'
                     ? 'Get homophones'
-                    : activeTool === 'rhymes'
-                      ? 'Get rhymes'
-                      : 'Get synonyms'}
+                    : 'Get rhymes'}
               </button>
             </div>
 

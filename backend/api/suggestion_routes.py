@@ -14,6 +14,7 @@ async def suggest_words(request: SuggestionRequest):
         mode=request.mode,
         selection=request.selection,
         trigger=request.trigger,
+        vocabulary_preference=request.vocabulary_preference,
     )
 
 
@@ -25,4 +26,5 @@ async def suggest_words_legacy(request: SuggestionRequest):
         mode=request.mode,
         selection=request.selection,
         trigger=request.trigger,
+        vocabulary_preference=request.vocabulary_preference,
     )

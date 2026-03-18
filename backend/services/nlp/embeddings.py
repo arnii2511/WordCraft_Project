@@ -13,23 +13,45 @@ try:
 except ImportError:  # pragma: no cover - handled by runtime fallback
     SentenceTransformer = None
 
+try:
+    import torch
+except ImportError:  # pragma: no cover - handled by runtime fallback
+    torch = None
+
 _model = None
+_model_device = None
 _word_embeddings: dict[str, np.ndarray] = {}
 _context_centroids: dict[str, np.ndarray] = {}
 _TOKEN_RE = re.compile(r"[a-zA-Z][a-zA-Z\-']+")
 _FALLBACK_DIM = 192
 
 
+def _resolve_device() -> str | None:
+    import os
+
+    forced = (os.getenv("WORDCRAFT_EMBEDDINGS_DEVICE") or "").strip().lower()
+    if forced:
+        return forced
+    if torch is not None and torch.cuda.is_available():
+        return "cuda"
+    return None
+
+
 def load_model(model_name: str = DEFAULT_MODEL_NAME):
-    global _model
+    global _model, _model_device
     if _model is not None:
         return _model
     if SentenceTransformer is None:
         return None
     try:
-        _model = SentenceTransformer(model_name)
+        _model_device = _resolve_device()
+        if _model_device:
+            _model = SentenceTransformer(model_name, device=_model_device)
+        else:
+            _model = SentenceTransformer(model_name)
     except Exception:
         _model = None
+        _model_device = None
     return _model
 
 

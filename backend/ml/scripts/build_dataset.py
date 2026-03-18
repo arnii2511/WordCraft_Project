@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from backend.ml.hard_negative import generate_hard_negatives
 from backend.services.nlp.constraints_service import get_constraint_matches
 from backend.services.nlp.engine import generate_suggestions
 from backend.services.nlp.lexical_service import get_lexical_results
@@ -46,8 +47,9 @@ def _candidate_row(
     reason: str = "",
     pos: str | None = None,
     source: str = "model",
+    extras: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    row = {
         "text": text,
         "label": 0,
         "model_score": round(float(model_score or 0.0), 4),
@@ -55,6 +57,12 @@ def _candidate_row(
         "reason": reason,
         "source": source,
     }
+    if extras:
+        for key, value in extras.items():
+            if key in row:
+                continue
+            row[key] = value
+    return row
 
 
 def _run_task(task: str, payload: dict[str, Any], limit: int) -> tuple[list[dict[str, Any]], str | None]:
@@ -75,6 +83,12 @@ def _run_task(task: str, payload: dict[str, Any], limit: int) -> tuple[list[dict
                 reason=item.get("note", ""),
                 pos=item.get("pos"),
                 source=item.get("source", "suggest"),
+                extras={
+                    "ml_score": item.get("ml_score"),
+                    "behavior_score": item.get("behavior_score"),
+                    "confidence": item.get("confidence"),
+                    "score_breakdown": item.get("score_breakdown"),
+                },
             )
             for item in suggestions
             if item.get("word")
@@ -117,6 +131,12 @@ def _run_task(task: str, payload: dict[str, Any], limit: int) -> tuple[list[dict
                 reason=item.get("reason", ""),
                 pos=item.get("pos"),
                 source="lexical",
+                extras={
+                    "ml_score": item.get("ml_score"),
+                    "behavior_score": item.get("behavior_score"),
+                    "confidence": item.get("confidence"),
+                    "score_breakdown": item.get("score_breakdown"),
+                },
             )
             for item in details
             if item.get("word")
@@ -137,6 +157,14 @@ def _run_task(task: str, payload: dict[str, Any], limit: int) -> tuple[list[dict
                 model_score=item.get("score", 0.0),
                 reason=item.get("reason", ""),
                 source="constraints",
+                extras={
+                    "rhyme": item.get("rhyme"),
+                    "relation_match": item.get("relation_match"),
+                    "ml_score": item.get("ml_score"),
+                    "behavior_score": item.get("behavior_score"),
+                    "confidence": item.get("confidence"),
+                    "score_breakdown": item.get("score_breakdown"),
+                },
             )
             for item in results
             if item.get("word")
@@ -155,6 +183,13 @@ def _run_task(task: str, payload: dict[str, Any], limit: int) -> tuple[list[dict
                 model_score=item.get("score", 0.0),
                 reason=item.get("reason", ""),
                 source="oneword",
+                extras={
+                    "meaning": item.get("meaning"),
+                    "ml_score": item.get("ml_score"),
+                    "behavior_score": item.get("behavior_score"),
+                    "confidence": item.get("confidence"),
+                    "score_breakdown": item.get("score_breakdown"),
+                },
             )
             for item in results
             if item.get("word")
@@ -169,6 +204,8 @@ def _enrich_and_label(
     generated: list[dict[str, Any]],
     *,
     inject_gold_positives: bool = True,
+    add_hard_negatives: bool = True,
+    hard_negative_limit: int = 8,
 ) -> dict[str, Any]:
     expected = record.get("expected", {})
     positives = expected.get("positives", []) or []
@@ -181,6 +218,19 @@ def _enrich_and_label(
         if not normalized:
             continue
         by_text[normalized] = candidate
+
+    if add_hard_negatives:
+        hard_negatives = generate_hard_negatives(
+            task=str(record.get("task", "")).strip().lower(),
+            payload=record.get("input", {}) or {},
+            positives=positives,
+            existing_texts=set(by_text.keys()),
+            max_items=max(1, min(24, int(hard_negative_limit or 8))),
+        )
+        for row in hard_negatives:
+            normalized = normalize_text(row.get("text", ""))
+            if normalized and normalized not in by_text:
+                by_text[normalized] = row
 
     # Optionally inject gold positives so supervised training always has positives.
     if inject_gold_positives:
@@ -228,6 +278,8 @@ def build_dataset(
     keep_empty: bool,
     use_reranker: bool,
     inject_gold_positives: bool,
+    hard_negatives: bool,
+    hard_negative_limit: int,
 ) -> None:
     if not use_reranker:
         os.environ["WORDCRAFT_DISABLE_RERANKER"] = "1"
@@ -243,6 +295,8 @@ def build_dataset(
             row,
             generated_candidates,
             inject_gold_positives=inject_gold_positives,
+            add_hard_negatives=hard_negatives,
+            hard_negative_limit=hard_negative_limit,
         )
         if note:
             enriched["note"] = note
@@ -255,6 +309,7 @@ def build_dataset(
     print(f"Built dataset rows: {len(built_rows)}")
     print(f"Skipped empty rows: {skipped}")
     print(f"Inject gold positives: {inject_gold_positives}")
+    print(f"Hard negatives: {hard_negatives} (limit={hard_negative_limit})")
     print(f"Output: {Path(output_path).as_posix()}")
 
 
@@ -280,6 +335,19 @@ def parse_args() -> argparse.Namespace:
         choices=["true", "false"],
         help="Inject expected positives into candidate list (true by default).",
     )
+    parser.add_argument(
+        "--hard-negatives",
+        type=str,
+        default="true",
+        choices=["true", "false"],
+        help="Generate hard negative candidates (true by default).",
+    )
+    parser.add_argument(
+        "--hard-negative-limit",
+        type=int,
+        default=8,
+        help="Max hard negatives per sample.",
+    )
     return parser.parse_args()
 
 
@@ -292,4 +360,6 @@ if __name__ == "__main__":
         keep_empty=args.keep_empty,
         use_reranker=args.use_reranker,
         inject_gold_positives=args.inject_gold_positives.lower() == "true",
+        hard_negatives=args.hard_negatives.lower() == "true",
+        hard_negative_limit=max(1, min(24, int(args.hard_negative_limit or 8))),
     )

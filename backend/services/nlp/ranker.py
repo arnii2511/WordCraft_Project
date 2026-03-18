@@ -25,8 +25,26 @@ COPULAR_VERBS = {
     "get",
 }
 IRREGULAR_ADVERBS = {"well", "fast", "hard", "late", "early", "straight", "right"}
+GENERIC_EDITOR_WORDS = {
+    "good",
+    "bad",
+    "nice",
+    "great",
+    "thing",
+    "things",
+    "stuff",
+    "person",
+    "people",
+    "feeling",
+    "feelings",
+    "very",
+    "really",
+}
+FORMAL_CONTEXTS = {"formal", "academic", "scholarly", "professional", "literary"}
+ADVANCED_CONTEXTS = FORMAL_CONTEXTS | {"advanced"}
 SOURCE_PRIORITY = [
     "selection",
+    "definition",
     "wordnet",
     "conceptnet",
     "derivational",
@@ -219,6 +237,89 @@ def _resolve_pos(word: str, expected_pos: set[str] | None) -> str:
     return "X"
 
 
+def _quality_bucket(
+    score: float,
+    grammar: float,
+    semantic: float,
+    context_sim: float,
+    blank_present: bool,
+    expected_pos: set[str] | None,
+) -> int:
+    if blank_present and expected_pos:
+        if grammar >= 0.95 and semantic >= 0.52:
+            return 4
+        if grammar >= 0.7 and semantic >= 0.5:
+            return 3
+        if grammar >= 0.45 and (semantic >= 0.56 or context_sim >= 0.6):
+            return 2
+        return 0
+    if score >= 0.56 and semantic >= 0.52:
+        return 3
+    if score >= 0.44 and (semantic >= 0.48 or context_sim >= 0.56):
+        return 2
+    if score >= 0.32:
+        return 1
+    return 0
+
+
+def _generic_penalty(
+    context_key: str,
+    word: str,
+    *,
+    semantic: float,
+    context_sim: float,
+    frequency: float,
+    sources: set[str],
+    blank_present: bool,
+    expected_pos: set[str] | None,
+    vocabulary_preference: str = "balanced",
+) -> float:
+    penalty = 0.0
+    if word in GENERIC_EDITOR_WORDS:
+        penalty += 0.10
+    if not blank_present and not expected_pos and word in GENERIC_EDITOR_WORDS:
+        penalty += 0.06
+    if context_key in FORMAL_CONTEXTS and word in GENERIC_EDITOR_WORDS:
+        penalty += 0.08
+    if blank_present and expected_pos and word in {"good", "bad", "nice"}:
+        penalty += 0.06
+    if frequency >= 0.65 and semantic < 0.62 and context_sim < 0.62 and "definition" not in sources:
+        penalty += 0.04
+    if vocabulary_preference == "advanced" and word in GENERIC_EDITOR_WORDS:
+        penalty += 0.08
+    if vocabulary_preference == "advanced" and frequency >= 0.72 and semantic < 0.68:
+        penalty += 0.04
+    return penalty
+
+
+def _precision_bonus(
+    context_key: str,
+    *,
+    semantic: float,
+    context_sim: float,
+    frequency: float,
+    sources: set[str],
+    blank_present: bool,
+    expected_pos: set[str] | None,
+    vocabulary_preference: str = "balanced",
+) -> float:
+    bonus = 0.0
+    if "definition" in sources and semantic >= 0.58:
+        bonus += 0.03
+    if not blank_present and not expected_pos and "definition" in sources and semantic >= 0.62:
+        bonus += 0.03
+    if context_key in FORMAL_CONTEXTS and 0.02 <= frequency <= 0.38 and (semantic >= 0.58 or context_sim >= 0.62):
+        bonus += 0.04
+    if vocabulary_preference == "advanced":
+        if "definition" in sources and semantic >= 0.6:
+            bonus += 0.04
+        if 0.015 <= frequency <= 0.32 and (semantic >= 0.58 or context_sim >= 0.6):
+            bonus += 0.04
+        if context_key in ADVANCED_CONTEXTS and 0.01 <= frequency <= 0.28 and semantic >= 0.56:
+            bonus += 0.03
+    return bonus
+
+
 def rank_candidates(
     cleaned_text: str,
     context_key: str,
@@ -232,6 +333,7 @@ def rank_candidates(
     strict_pos: bool = False,
     expected_pos_override: set[str] | None = None,
     context_words: set[str] | None = None,
+    vocabulary_preference: str = "balanced",
 ) -> list[dict]:
     sentence_vector = embeddings.embed_sentence(cleaned_text)
     context_vector = embeddings.get_context_centroid(context_key)
@@ -270,6 +372,8 @@ def rank_candidates(
         source_score = 0.0
         if source_map:
             sources = source_map.get(word, set())
+            if "definition" in sources:
+                source_score += 0.04
             if "wordnet" in sources:
                 source_score += 0.05
             if "conceptnet" in sources:
@@ -281,6 +385,28 @@ def rank_candidates(
         if context_vocab and word in context_vocab:
             context_sim = max(context_sim, 0.62)
 
+        precision_bonus = _precision_bonus(
+            context_key,
+            semantic=semantic,
+            context_sim=context_sim,
+            frequency=frequency,
+            sources=sources,
+            blank_present=blank_present,
+            expected_pos=expected_pos,
+            vocabulary_preference=vocabulary_preference,
+        )
+        generic_penalty = _generic_penalty(
+            context_key,
+            word,
+            semantic=semantic,
+            context_sim=context_sim,
+            frequency=frequency,
+            sources=sources,
+            blank_present=blank_present,
+            expected_pos=expected_pos,
+            vocabulary_preference=vocabulary_preference,
+        )
+
         score = (
             active_weights["semantic"] * semantic
             + active_weights["context"] * context_sim
@@ -288,6 +414,8 @@ def rank_candidates(
             + active_weights["grammar"] * grammar
             + active_weights["frequency"] * frequency
             + source_score
+            + precision_bonus
+            - generic_penalty
         )
 
         reasons: list[str] = []
@@ -312,6 +440,14 @@ def rank_candidates(
             reasons.append("Rare word.")
 
         pos = _resolve_pos(word, expected_pos)
+        quality_bucket = _quality_bucket(
+            score=score,
+            grammar=grammar,
+            semantic=semantic,
+            context_sim=context_sim,
+            blank_present=blank_present,
+            expected_pos=expected_pos,
+        )
         primary_source = "model"
         if sources:
             for src in SOURCE_PRIORITY:
@@ -327,8 +463,14 @@ def rank_candidates(
                 "pos": pos,
                 "note": " ".join(reasons),
                 "source": primary_source,
+                "_quality_bucket": quality_bucket,
             }
         )
 
-    scored.sort(key=lambda item: item["score"], reverse=True)
-    return scored[:top_k]
+    scored = [item for item in scored if item["_quality_bucket"] > 0]
+    scored.sort(key=lambda item: (item["_quality_bucket"], item["score"]), reverse=True)
+    cleaned = []
+    for item in scored[:top_k]:
+        next_item = {key: value for key, value in item.items() if not key.startswith("_")}
+        cleaned.append(next_item)
+    return cleaned

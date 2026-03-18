@@ -1,10 +1,16 @@
 export type SuggestionPos = 'NOUN' | 'VERB' | 'ADJ' | 'ADV' | 'X';
+export type VocabularyPreference = 'balanced' | 'advanced';
 
 export interface SuggestionItem {
   word: string;
   score?: number;
   pos?: SuggestionPos;
   note?: string;
+  source?: string;
+  ml_score?: number;
+  behavior_score?: number;
+  confidence?: number;
+  score_breakdown?: Record<string, unknown>;
 }
 
 export interface SuggestResponse {
@@ -36,6 +42,11 @@ export interface LexicalResultDetail {
   score: number;
   pos?: string | null;
   reason: string;
+  source?: string;
+  ml_score?: number;
+  behavior_score?: number;
+  confidence?: number;
+  score_breakdown?: Record<string, unknown>;
 }
 
 export type ConstraintRelation = 'synonym' | 'antonym';
@@ -46,6 +57,11 @@ export interface ConstraintResult {
   rhyme: boolean;
   relation_match: boolean;
   reason: string;
+  source?: string;
+  ml_score?: number;
+  behavior_score?: number;
+  confidence?: number;
+  score_breakdown?: Record<string, unknown>;
 }
 
 export interface ConstraintResponse {
@@ -58,6 +74,11 @@ export interface OneWordResult {
   score: number;
   reason: string;
   meaning?: string | null;
+  source?: string;
+  ml_score?: number;
+  behavior_score?: number;
+  confidence?: number;
+  score_breakdown?: Record<string, unknown>;
 }
 
 export interface OneWordResponse {
@@ -128,6 +149,22 @@ export interface FeedbackPayload {
   reason?: string;
   session_id?: string;
   input_text?: string;
+  vocabulary_preference?: VocabularyPreference;
+}
+
+export interface ImplicitFeedbackPayload {
+  task: FeedbackTask;
+  candidate: string;
+  action: 'inserted' | 'copied' | 'favorited';
+  context?: string;
+  mode?: 'write' | 'edit' | 'rewrite';
+  input_payload?: Record<string, unknown>;
+  pos?: string;
+  model_score?: number;
+  reason?: string;
+  session_id?: string;
+  input_text?: string;
+  vocabulary_preference?: VocabularyPreference;
 }
 
 export interface FeedbackResponse {

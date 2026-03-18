@@ -6,11 +6,13 @@ import type {
   FeedbackPayload,
   FeedbackResponse,
   FavoriteEntry,
+  ImplicitFeedbackPayload,
   LexicalTask,
   LexicalResponse,
   OneWordResponse,
   SuggestResponse,
   UserProfile,
+  VocabularyPreference,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -113,6 +115,7 @@ export const writingAPI = {
     mode: 'write' | 'edit' | 'rewrite',
     selection: { text: string; start: number; end: number } | null,
     trigger: 'auto' | 'button',
+    vocabularyPreference: VocabularyPreference = 'balanced',
   ): Promise<SuggestResponse> => {
     const response = await publicApi.post<SuggestResponse>('/suggest', {
       sentence,
@@ -120,6 +123,7 @@ export const writingAPI = {
       mode,
       selection,
       trigger,
+      vocabulary_preference: vocabularyPreference,
     });
     return response.data;
   },
@@ -131,11 +135,13 @@ export const lexicalAPI = {
     word: string,
     task: LexicalTask,
     context?: string,
+    vocabularyPreference: VocabularyPreference = 'balanced',
   ): Promise<LexicalResponse> => {
     const response = await publicApi.post<LexicalResponse>('/lexical', {
       word,
       task,
       context,
+      vocabulary_preference: vocabularyPreference,
     });
     return response.data;
   },
@@ -148,6 +154,7 @@ export const constraintsAPI = {
     meaning_of: string;
     context?: string;
     limit?: number;
+    vocabulary_preference?: VocabularyPreference;
   }): Promise<ConstraintResponse> => {
     const response = await publicApi.post<ConstraintResponse>('/constraints', payload);
     return response.data;
@@ -159,6 +166,7 @@ export const onewordAPI = {
     query: string;
     context?: string;
     limit?: number;
+    vocabulary_preference?: VocabularyPreference;
   }): Promise<OneWordResponse> => {
     const response = await publicApi.post<OneWordResponse>('/oneword', payload);
     return response.data;
@@ -263,6 +271,10 @@ export const feedbackAPI = {
   submitRating: async (payload: FeedbackPayload): Promise<FeedbackResponse> => {
     // Feedback endpoint accepts optional user; allow guest telemetry too.
     const response = await publicApi.post<FeedbackResponse>('/feedback', payload);
+    return response.data;
+  },
+  submitImplicit: async (payload: ImplicitFeedbackPayload): Promise<FeedbackResponse> => {
+    const response = await publicApi.post<FeedbackResponse>('/feedback/implicit', payload);
     return response.data;
   },
 };

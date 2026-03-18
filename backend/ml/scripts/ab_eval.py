@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 
 from .common import RankingMetrics, compute_ranking_metrics, load_jsonl
-from .eval_reranker import _feature_text, _prob_to_score
+from .eval_reranker import _feature_text, _predict_scores
 
 DEFAULT_DATASET = "backend/ml/data/splits/test.jsonl"
 DEFAULT_ARTIFACT = "backend/ml/models/reranker.pkl"
@@ -77,13 +77,9 @@ def ab_eval(dataset_path: str, artifact_path: str, exclude_gold_seed: bool, task
         raise ValueError("No candidate rows available for A/B evaluation.")
 
     artifact = pickle.loads(Path(artifact_path).read_bytes())
-    vectorizer = artifact["vectorizer"]
-    model = artifact["model"]
 
     x = [row["feature_text"] for row in flat_rows]
-    x_vec = vectorizer.transform(x)
-    probabilities = model.predict_proba(x_vec)
-    reranker_scores = _prob_to_score(probabilities, model.classes_)
+    _, reranker_scores = _predict_scores(artifact, x)
     baseline_scores = [row["baseline_score"] for row in flat_rows]
 
     grouped_baseline = _group_from_scores(flat_rows, baseline_scores)
@@ -111,6 +107,7 @@ def ab_eval(dataset_path: str, artifact_path: str, exclude_gold_seed: bool, task
         "rows": len(flat_rows),
         "exclude_gold_seed": bool(exclude_gold_seed),
         "task_filter": task_filter,
+        "artifact_type": artifact.get("artifact_type", "sklearn_tfidf_logreg"),
         "baseline": base_dict,
         "reranker": rerank_dict,
         "delta_reranker_minus_baseline": deltas,

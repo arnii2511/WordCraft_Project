@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from dataclasses import dataclass
+from functools import lru_cache
 from typing import Iterable
 
 _WORD_RE = re.compile(r"^[a-zA-Z][a-zA-Z\-]*$")
@@ -22,6 +24,17 @@ STOPWORDS = {
     "with",
     "from",
 }
+_TOKEN_RE = re.compile(r"[a-zA-Z][a-zA-Z\-]*")
+
+
+@dataclass(frozen=True)
+class LexicalEntry:
+    word: str
+    definition: str
+    pos_code: str
+    lexname: str
+    lemma_count: int
+    definition_tokens: tuple[str, ...]
 
 
 def get_wordnet():
@@ -36,6 +49,16 @@ def get_wordnet():
     return wn
 
 
+def _definition_tokens(text: str) -> tuple[str, ...]:
+    tokens: list[str] = []
+    for raw in _TOKEN_RE.findall((text or "").lower()):
+        cleaned = raw.strip().lower()
+        if len(cleaned) < 3 or cleaned in STOPWORDS:
+            continue
+        tokens.append(cleaned)
+    return tuple(dict.fromkeys(tokens))
+
+
 def is_valid_word(word: str) -> bool:
     if not word:
         return False
@@ -44,6 +67,85 @@ def is_valid_word(word: str) -> bool:
     if word in STOPWORDS:
         return False
     return bool(_WORD_RE.match(word))
+
+
+@lru_cache(maxsize=1)
+def get_lexical_entries() -> tuple[LexicalEntry, ...]:
+    wn = get_wordnet()
+    if wn is None:
+        return tuple()
+    entries: list[LexicalEntry] = []
+    seen: set[tuple[str, str]] = set()
+    for synset in wn.all_synsets():
+        definition = synset.definition().strip()
+        if not definition:
+            continue
+        def_tokens = _definition_tokens(definition)
+        if not def_tokens:
+            continue
+        for lemma in synset.lemmas():
+            word = lemma.name().replace("_", " ").strip().lower()
+            if " " in word or not is_valid_word(word):
+                continue
+            key = (word, definition.lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            entries.append(
+                LexicalEntry(
+                    word=word,
+                    definition=definition,
+                    pos_code=synset.pos(),
+                    lexname=synset.lexname(),
+                    lemma_count=max(0, lemma.count()),
+                    definition_tokens=def_tokens,
+                )
+            )
+    return tuple(entries)
+
+
+def search_definition_entries(
+    query: str,
+    *,
+    suffix: str | None = None,
+    require_pos_codes: set[str] | None = None,
+    limit: int = 64,
+) -> list[LexicalEntry]:
+    query_tokens = set(_definition_tokens(query))
+    if not query_tokens:
+        return []
+    lowered_query = (query or "").strip().lower()
+    scored: list[tuple[float, LexicalEntry]] = []
+    for entry in get_lexical_entries():
+        if suffix and not entry.word.endswith(suffix.lower()):
+            continue
+        if require_pos_codes and entry.pos_code not in require_pos_codes:
+            continue
+        overlap = len(query_tokens & set(entry.definition_tokens))
+        if overlap <= 0:
+            continue
+        coverage = overlap / max(1, len(query_tokens))
+        precision = overlap / max(1, len(entry.definition_tokens))
+        phrase_bonus = 0.18 if lowered_query in entry.definition.lower() else 0.0
+        specificity = min(entry.lemma_count, 6) / 6.0
+        score = 0.52 * coverage + 0.24 * precision + phrase_bonus + 0.06 * specificity
+        scored.append((score, entry))
+    scored.sort(key=lambda item: (item[0], item[1].lemma_count, item[1].word), reverse=True)
+    return [entry for _, entry in scored[:limit]]
+
+
+def get_definitions_for_word(word: str, max_results: int = 6) -> list[str]:
+    wn = get_wordnet()
+    if wn is None or not word:
+        return []
+    definitions: list[str] = []
+    for synset in wn.synsets(word):
+        definition = synset.definition().strip()
+        if definition and definition not in definitions:
+            definitions.append(definition)
+            if len(definitions) >= max_results:
+                break
+    return definitions
 
 
 def get_synonyms(words: Iterable[str], max_synonyms_per_word: int = 6) -> set[str]:

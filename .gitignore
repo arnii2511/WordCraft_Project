@@ -42,7 +42,12 @@ __pycache__/
 
 # ML generated artifacts
 backend/ml/models/*.pkl
+backend/ml/models/*.json
+backend/ml/models/cross_encoder_ranker/
+backend/ml/models/contrastive_ranker/
+backend/ml/models/rewrite_lora/
 backend/ml/data/dataset_ranker.jsonl
 backend/ml/data/dataset_feedback.jsonl
 backend/ml/data/splits/
 backend/ml/data/*.parquet
+backend/ml/models/retrieval_manifest.json

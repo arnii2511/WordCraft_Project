@@ -11,7 +11,7 @@ import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
 
 from .common import compute_ranking_metrics, load_jsonl
-from .eval_reranker import _flatten_rows, _prob_to_score
+from .eval_reranker import _flatten_rows, _predict_scores
 
 DEFAULT_TEST_SPLIT = "backend/ml/data/splits/test.jsonl"
 DEFAULT_ARTIFACT = "backend/ml/models/reranker.pkl"
@@ -33,15 +33,10 @@ def test_model(
         raise ValueError("Dataset has no labeled candidate rows.")
 
     artifact = pickle.loads(Path(artifact_path).read_bytes())
-    vectorizer = artifact["vectorizer"]
-    model = artifact["model"]
 
     x = [row["feature_text"] for row in flat_rows]
     y = np.array([row["label"] for row in flat_rows], dtype=np.int64)
-    x_vec = vectorizer.transform(x)
-    y_pred = model.predict(x_vec)
-    probabilities = model.predict_proba(x_vec)
-    pred_scores = _prob_to_score(probabilities, model.classes_)
+    y_pred, pred_scores = _predict_scores(artifact, x)
 
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row, score in zip(flat_rows, pred_scores):
@@ -60,6 +55,7 @@ def test_model(
         "rows": len(flat_rows),
         "exclude_gold_seed": bool(exclude_gold_seed),
         "task_filter": task_filter,
+        "artifact_type": artifact.get("artifact_type", "sklearn_tfidf_logreg"),
     }
     print(json.dumps(report, indent=2))
 

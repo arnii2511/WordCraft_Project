@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { authAPI } from '../services/api';
 import type { AuthResponse } from '../types';
 
 interface LoginProps {
   onSuccess: (response: AuthResponse) => void;
+  onClose: () => void;
 }
 
-const Login = ({ onSuccess }: LoginProps) => {
+const Login = ({ onSuccess, onClose }: LoginProps) => {
   const [isRegister, setIsRegister] = useState(false);
 
   const [signInEmail, setSignInEmail] = useState('');
@@ -28,6 +29,16 @@ const Login = ({ onSuccess }: LoginProps) => {
   const strongPasswordPattern =
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
   const indiaPhonePattern = /^\+91\s[6-9]\d{9}$/;
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   const switchTab = (registerMode: boolean) => {
     setIsRegister(registerMode);
@@ -171,8 +182,11 @@ const Login = ({ onSuccess }: LoginProps) => {
   };
 
   return (
-    <div className="auth-page">
-      <div className="auth-card">
+    <div className="auth-page" onClick={onClose}>
+      <div className="auth-card" onClick={(event) => event.stopPropagation()}>
+        <button type="button" className="auth-close" onClick={onClose} aria-label="Close auth dialog">
+          ×
+        </button>
         <div className="auth-header">
           <h1 className="auth-title">WordCraft</h1>
           <p className="auth-subtitle">Your writing companion</p>

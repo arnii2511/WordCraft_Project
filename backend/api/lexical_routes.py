@@ -8,7 +8,12 @@ router = APIRouter()
 
 @router.post("/lexical", response_model=LexicalResponse)
 async def lexical_tools(request: LexicalRequest):
-    results, details = get_lexical_results(request.word, request.task, context=request.context)
+    results, details = get_lexical_results(
+        request.word,
+        request.task,
+        context=request.context,
+        vocabulary_preference=request.vocabulary_preference,
+    )
     return {
         "word": request.word,
         "task": request.task,

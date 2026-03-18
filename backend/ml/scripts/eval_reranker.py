@@ -69,6 +69,33 @@ def _prob_to_score(probabilities: np.ndarray, classes: np.ndarray) -> np.ndarray
     return probabilities @ class_values
 
 
+def _predict_scores(artifact: dict[str, Any], feature_rows: list[str]) -> tuple[np.ndarray, np.ndarray]:
+    artifact_type = artifact.get("artifact_type", "sklearn_tfidf_logreg")
+
+    if artifact_type == "sklearn_tfidf_logreg":
+        vectorizer = artifact["vectorizer"]
+        model = artifact["model"]
+        x_vec = vectorizer.transform(feature_rows)
+        y_pred = model.predict(x_vec)
+        probabilities = model.predict_proba(x_vec)
+        pred_scores = _prob_to_score(probabilities, model.classes_)
+        return y_pred.astype(np.int64), pred_scores.astype(np.float32)
+
+    if artifact_type.startswith("cross_encoder"):
+        from sentence_transformers.cross_encoder import CrossEncoder
+
+        model = CrossEncoder(artifact["model_path"])
+        values = np.asarray(model.predict(feature_rows), dtype=np.float32)
+        if values.ndim == 2:
+            values = values.reshape(-1)
+        probs = 1.0 / (1.0 + np.exp(-values))
+        # Map to coarse relevance labels for compatibility with classification metrics.
+        y_pred = np.where(probs >= 0.75, 3, np.where(probs >= 0.5, 2, np.where(probs >= 0.3, 1, 0)))
+        return y_pred.astype(np.int64), probs.astype(np.float32)
+
+    raise ValueError(f"Unsupported artifact_type: {artifact_type}")
+
+
 def evaluate(
     dataset_path: str,
     artifact_path: str,
@@ -85,16 +112,9 @@ def evaluate(
         raise ValueError("Dataset has no labeled candidate rows.")
 
     artifact = pickle.loads(Path(artifact_path).read_bytes())
-    vectorizer = artifact["vectorizer"]
-    model = artifact["model"]
-
     x = [row["feature_text"] for row in flat_rows]
     y = np.array([row["label"] for row in flat_rows], dtype=np.int64)
-    x_vec = vectorizer.transform(x)
-
-    y_pred = model.predict(x_vec)
-    probabilities = model.predict_proba(x_vec)
-    pred_scores = _prob_to_score(probabilities, model.classes_)
+    y_pred, pred_scores = _predict_scores(artifact, x)
 
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row, score in zip(flat_rows, pred_scores):
@@ -116,6 +136,7 @@ def evaluate(
         "rows": len(flat_rows),
         "exclude_gold_seed": bool(exclude_gold_seed),
         "task_filter": task_filter,
+        "artifact_type": artifact.get("artifact_type", "sklearn_tfidf_logreg"),
     }
     print(json.dumps(metrics, indent=2))
 

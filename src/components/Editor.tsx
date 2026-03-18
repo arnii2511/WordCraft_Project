@@ -4,7 +4,7 @@ import StarterKit from '@tiptap/starter-kit';
 import React, { useEffect, useRef, useState } from 'react';
 import { writingAPI } from '../services/api';
 import { loadSnapshots, saveSnapshot } from '../services/sessionHistory';
-import type { SelectionPayload, SuggestResponse } from '../types';
+import type { SelectionPayload, SuggestResponse, VocabularyPreference } from '../types';
 
 interface EditorProps {
   context: string;
@@ -16,6 +16,7 @@ interface EditorProps {
   rewriteSignal: number;
   isAuthenticated: boolean;
   documentId: string | null;
+  vocabularyPreference: VocabularyPreference;
 }
 
 const EditorSurface = ({
@@ -28,6 +29,7 @@ const EditorSurface = ({
   rewriteSignal,
   isAuthenticated,
   documentId,
+  vocabularyPreference,
 }: EditorProps) => {
   const [loading, setLoading] = useState(false);
   const [wordCount, setWordCount] = useState(0);
@@ -98,6 +100,7 @@ const EditorSurface = ({
         mode,
         selection,
         trigger,
+        vocabularyPreference,
       );
       if (requestId !== requestRef.current) {
         return;
@@ -167,7 +170,8 @@ const EditorSurface = ({
       return;
     }
     fetchSuggestions(trimmed, 'button');
-  }, [rewriteSignal, draftText, mode, selection, context]);
+  }, [rewriteSignal, draftText, mode, selection, context, vocabularyPreference]);
+  
 
   useEffect(() => {
     if (debounceRef.current) {
@@ -199,7 +203,7 @@ const EditorSurface = ({
         window.clearTimeout(debounceRef.current);
       }
     };
-  }, [draftText, context, mode, selection, onSuggestionsUpdate]);
+  }, [draftText, context, mode, selection, onSuggestionsUpdate, vocabularyPreference]);
 
   useEffect(() => {
     if (mode === 'rewrite') {

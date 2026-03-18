@@ -7,7 +7,13 @@ import DocumentsPanel from '../components/DocumentsPanel';
 import FavoritesPanel from '../components/FavoritesPanel';
 import HistoryPanel from '../components/HistoryPanel';
 import AppHeader from '../components/AppHeader';
-import type { DocumentEntry, SelectionPayload, SuggestResponse, UserProfile } from '../types';
+import type {
+  DocumentEntry,
+  SelectionPayload,
+  SuggestResponse,
+  UserProfile,
+  VocabularyPreference,
+} from '../types';
 
 const PENDING_INSERT_KEY = 'wordcraft_pending_insert';
 const MODE_CARDS: Array<{
@@ -35,6 +41,8 @@ const MODE_CARDS: Array<{
 interface EditorPageProps {
   context: string;
   setContext: (value: string) => void;
+  vocabularyPreference: VocabularyPreference;
+  setVocabularyPreference: (value: VocabularyPreference) => void;
   mode: 'write' | 'edit' | 'rewrite';
   setMode: (value: 'write' | 'edit' | 'rewrite') => void;
   user: UserProfile | null;
@@ -45,6 +53,8 @@ interface EditorPageProps {
 const EditorPage = ({
   context,
   setContext,
+  vocabularyPreference,
+  setVocabularyPreference,
   mode,
   setMode,
   user,
@@ -66,6 +76,33 @@ const EditorPage = ({
   const [selection, setSelection] = useState<SelectionPayload | null>(null);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
   const editorRef = useRef<TipTapEditor | null>(null);
+
+  const rewriteToDoc = (text: string) => ({
+    type: 'doc',
+    content: text.split(/\n+/).filter(Boolean).map((line) => ({
+      type: 'paragraph',
+      content: line ? [{ type: 'text', text: line }] : [],
+    })),
+  });
+
+  const findBlankRange = (editor: TipTapEditor): { from: number; to: number } | null => {
+    const blankPattern = /(_{3,}|\[BLANK\]|<blank>|\(blank\))/i;
+    let found: { from: number; to: number } | null = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (found || !node.isText || !node.text) {
+        return !found;
+      }
+      const match = node.text.match(blankPattern);
+      if (!match || match.index === undefined) {
+        return true;
+      }
+      const from = pos + match.index;
+      const to = from + match[0].length;
+      found = { from, to };
+      return false;
+    });
+    return found;
+  };
 
   useEffect(() => {
     const storedDocId = localStorage.getItem('active_document_id');
@@ -94,15 +131,37 @@ const EditorPage = ({
   }, []);
 
   const handleInsertWord = (word: string) => {
-    if (editorRef.current) {
-      editorRef.current.chain().focus().insertContent(`${word} `).run();
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    if (selection) {
+      editor
+        .chain()
+        .focus()
+        .insertContentAt({ from: selection.start, to: selection.end }, `${word} `)
+        .run();
+      return;
     }
+
+    if (suggestions.detected_blank) {
+      const blankRange = findBlankRange(editor);
+      if (blankRange) {
+        editor
+          .chain()
+          .focus()
+          .insertContentAt(blankRange, `${word} `)
+          .run();
+        return;
+      }
+    }
+
+    editor.chain().focus().insertContent(`${word} `).run();
   };
 
   const handleInsertRewrite = (rewrite: string) => {
-    if (editorRef.current) {
-      editorRef.current.chain().focus().insertContent(`${rewrite} `).run();
-    }
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.commands.setContent(rewriteToDoc(rewrite));
   };
 
   const handleSave = () => {
@@ -176,6 +235,7 @@ const EditorPage = ({
                 rewriteSignal={rewriteSignal}
                 isAuthenticated={isAuthenticated}
                 documentId={activeDocumentId}
+                vocabularyPreference={vocabularyPreference}
               />
             </div>
 
@@ -194,6 +254,8 @@ const EditorPage = ({
               selection={selection}
               context={context}
               onContextChange={setContext}
+              vocabularyPreference={vocabularyPreference}
+              onVocabularyPreferenceChange={setVocabularyPreference}
             />
           </div>
         </section>

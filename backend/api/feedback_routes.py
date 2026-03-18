@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends
 
 from ..auth import get_optional_user
 from ..db import db
-from ..models.request_models import FeedbackRequest, FeedbackResponse
+from ..models.request_models import FeedbackRequest, FeedbackResponse, ImplicitFeedbackRequest
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
@@ -24,22 +24,44 @@ def _quality_bucket(rating: int) -> tuple[str, int]:
     return "good", 3
 
 
-def _input_key(task: str, payload: dict[str, Any], context: str | None, mode: str | None) -> str:
+def _input_key(
+    task: str,
+    payload: dict[str, Any],
+    context: str | None,
+    mode: str | None,
+    vocabulary_preference: str | None,
+) -> str:
     normalized = {
         "task": task,
         "context": (context or "").strip().lower(),
         "mode": (mode or "").strip().lower(),
+        "vocabulary_preference": (vocabulary_preference or "").strip().lower(),
         "input_payload": payload or {},
     }
     digest = hashlib.sha1(json.dumps(normalized, sort_keys=True).encode("utf-8")).hexdigest()
     return digest
 
 
+def _implicit_mapping(action: str) -> tuple[int, str, int, str]:
+    normalized = (action or "").strip().lower()
+    if normalized == "inserted":
+        return 5, "good", 3, "implicit_insert"
+    if normalized == "copied":
+        return 4, "good", 2, "implicit_copy"
+    return 4, "good", 2, "implicit_favorite"
+
+
 @router.post("", response_model=FeedbackResponse)
 async def create_feedback(payload: FeedbackRequest, current_user=Depends(get_optional_user)):
     quality, label = _quality_bucket(payload.rating)
     now = datetime.now(timezone.utc)
-    key = _input_key(payload.task, payload.input_payload, payload.context, payload.mode)
+    key = _input_key(
+        payload.task,
+        payload.input_payload,
+        payload.context,
+        payload.mode,
+        payload.vocabulary_preference,
+    )
 
     doc = {
         "task": payload.task,
@@ -52,6 +74,7 @@ async def create_feedback(payload: FeedbackRequest, current_user=Depends(get_opt
         "input_payload": payload.input_payload or {},
         "input_key": key,
         "input_text": payload.input_text,
+        "vocabulary_preference": payload.vocabulary_preference,
         "source": payload.source,
         "pos": payload.pos,
         "model_score": payload.model_score,
@@ -70,6 +93,50 @@ async def create_feedback(payload: FeedbackRequest, current_user=Depends(get_opt
         "quality": quality,
         "label": label,
         "message": "Feedback saved",
+    }
+
+
+@router.post("/implicit", response_model=FeedbackResponse)
+async def create_implicit_feedback(payload: ImplicitFeedbackRequest, current_user=Depends(get_optional_user)):
+    rating, quality, label, source = _implicit_mapping(payload.action)
+    now = datetime.now(timezone.utc)
+    key = _input_key(
+        payload.task,
+        payload.input_payload,
+        payload.context,
+        payload.mode,
+        payload.vocabulary_preference,
+    )
+
+    doc = {
+        "task": payload.task,
+        "candidate": payload.candidate.strip(),
+        "rating": rating,
+        "quality": quality,
+        "label": label,
+        "context": payload.context,
+        "mode": payload.mode,
+        "input_payload": payload.input_payload or {},
+        "input_key": key,
+        "input_text": payload.input_text,
+        "vocabulary_preference": payload.vocabulary_preference,
+        "source": source,
+        "pos": payload.pos,
+        "model_score": payload.model_score,
+        "reason": payload.reason or f"Implicit feedback from {payload.action} action.",
+        "session_id": payload.session_id,
+        "created_at": now,
+        "user_id": current_user.get("_id") if current_user else None,
+    }
+    result = await db.feedback_ratings.insert_one(doc)
+    return {
+        "id": str(result.inserted_id),
+        "task": payload.task,
+        "candidate": payload.candidate.strip(),
+        "rating": rating,
+        "quality": quality,
+        "label": label,
+        "message": "Implicit feedback saved",
     }
 
 

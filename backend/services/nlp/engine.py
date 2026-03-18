@@ -50,14 +50,23 @@ def _resolve_context_key(context: str, contexts: dict[str, dict]) -> str:
     return next(iter(contexts))
 
 
-def _mode_weights(mode: str, intent: str) -> dict[str, float]:
+def _mode_weights(mode: str, intent: str, vocabulary_preference: str = "balanced") -> dict[str, float]:
     if mode == "edit":
-        return {"semantic": 0.34, "context": 0.12, "emotion": 0.04, "grammar": 0.36, "frequency": 0.14}
-    if mode == "rewrite":
-        return {"semantic": 0.44, "context": 0.24, "emotion": 0.08, "grammar": 0.16, "frequency": 0.08}
-    if intent == "blank":
-        return {"semantic": 0.34, "context": 0.16, "emotion": 0.08, "grammar": 0.34, "frequency": 0.08}
-    return {"semantic": 0.45, "context": 0.23, "emotion": 0.08, "grammar": 0.16, "frequency": 0.08}
+        weights = {"semantic": 0.34, "context": 0.12, "emotion": 0.04, "grammar": 0.36, "frequency": 0.14}
+    elif mode == "rewrite":
+        weights = {"semantic": 0.44, "context": 0.24, "emotion": 0.08, "grammar": 0.16, "frequency": 0.08}
+    elif intent == "blank":
+        weights = {"semantic": 0.34, "context": 0.16, "emotion": 0.08, "grammar": 0.34, "frequency": 0.08}
+    else:
+        weights = {"semantic": 0.45, "context": 0.23, "emotion": 0.08, "grammar": 0.16, "frequency": 0.08}
+    if (vocabulary_preference or "balanced").strip().lower() == "advanced":
+        weights = {
+            **weights,
+            "semantic": round(weights["semantic"] + 0.04, 4),
+            "context": round(weights["context"] + 0.02, 4),
+            "frequency": max(0.02, round(weights["frequency"] - 0.06, 4)),
+        }
+    return weights
 
 
 def _should_rewrite(
@@ -82,6 +91,7 @@ def generate_suggestions(
     selection: Any | None = None,
     trigger: str = "auto",
     max_suggestions: int = 5,
+    vocabulary_preference: str = "balanced",
 ) -> dict[str, Any]:
     initialize()
     if not _INITIALIZED or _CONTEXTS is None:
@@ -97,6 +107,7 @@ def generate_suggestions(
         mode=mode_key,
         contexts=_CONTEXTS,
         selection=selection,
+        vocabulary_preference=vocabulary_preference,
     )
     cleaned_text = pipeline.decision.cleaned_text
     blank_present = pipeline.decision.blank_present
@@ -113,12 +124,13 @@ def generate_suggestions(
         context_description=pipeline.context_description,
         blank_present=blank_present and pipeline.decision.intent != "selection",
         emotion_scores=pipeline.emotion_scores,
-        weights=_mode_weights(mode_key, pipeline.decision.intent),
+        weights=_mode_weights(mode_key, pipeline.decision.intent, vocabulary_preference),
         top_k=capped_suggestions,
         source_map=pipeline.source_map,
         strict_pos=pipeline.decision.strict_pos,
         expected_pos_override=pipeline.decision.expected_pos,
         context_words=set(_CONTEXTS.get(context_key, {}).get("words", [])),
+        vocabulary_preference=vocabulary_preference,
     )
     task = "suggest_sentence"
     if pipeline.decision.intent == "blank":
@@ -133,6 +145,7 @@ def generate_suggestions(
             "mode": mode_key,
             "selection": selection,
             "trigger": trigger,
+            "vocabulary_preference": vocabulary_preference,
         },
         candidates=ranked,
         text_key="word",

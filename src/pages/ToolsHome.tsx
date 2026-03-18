@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import ToolsPanel, { type ToolTab } from '../components/tools/ToolsPanel';
 import AppHeader from '../components/AppHeader';
-import type { UserProfile } from '../types';
+import type { UserProfile, VocabularyPreference } from '../types';
 
 interface ToolsHomeProps {
   context: string;
   setContext: (value: string) => void;
+  vocabularyPreference: VocabularyPreference;
+  setVocabularyPreference: (value: VocabularyPreference) => void;
   isAuthenticated: boolean;
   user: UserProfile | null;
   onRequireAuth: () => void;
@@ -46,6 +48,8 @@ const TOOL_CARDS: Array<{
 const ToolsHome = ({
   context,
   setContext,
+  vocabularyPreference,
+  setVocabularyPreference,
   isAuthenticated,
   user,
   onRequireAuth,
@@ -91,6 +95,8 @@ const ToolsHome = ({
           isAuthenticated={isAuthenticated}
           context={context}
           onContextChange={setContext}
+          vocabularyPreference={vocabularyPreference}
+          onVocabularyPreferenceChange={setVocabularyPreference}
         />
       </section>
 

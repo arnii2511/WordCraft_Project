@@ -180,6 +180,7 @@ def train(
     ranking_metrics: RankingMetrics = compute_ranking_metrics(grouped_for_ranking)
 
     artifact = {
+        "artifact_type": "sklearn_tfidf_logreg",
         "vectorizer": vectorizer,
         "model": model,
         "metadata": {

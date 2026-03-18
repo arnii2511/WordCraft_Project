@@ -4,6 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+VocabularyPreference = Literal["balanced", "advanced"]
+
 
 class SelectionSpan(BaseModel):
     text: str
@@ -17,6 +19,7 @@ class SuggestionRequest(BaseModel):
     mode: Literal["write", "edit", "rewrite"] = "write"
     selection: SelectionSpan | None = None
     trigger: Literal["auto", "button"] = "auto"
+    vocabulary_preference: VocabularyPreference = "balanced"
 
 
 class SuggestionItem(BaseModel):
@@ -24,6 +27,11 @@ class SuggestionItem(BaseModel):
     score: float
     pos: str | None = None
     note: str | None = None
+    source: str | None = None
+    ml_score: float | None = None
+    behavior_score: float | None = None
+    confidence: float | None = None
+    score_breakdown: dict[str, Any] | None = None
 
 
 class SuggestionResponse(BaseModel):
@@ -38,6 +46,7 @@ class LexicalRequest(BaseModel):
     word: str = Field(..., min_length=1)
     task: Literal["synonyms", "antonyms", "homonyms", "rhymes"]
     context: str | None = None
+    vocabulary_preference: VocabularyPreference = "balanced"
 
 
 class LexicalResult(BaseModel):
@@ -45,6 +54,11 @@ class LexicalResult(BaseModel):
     score: float
     pos: str | None = None
     reason: str
+    source: str | None = None
+    ml_score: float | None = None
+    behavior_score: float | None = None
+    confidence: float | None = None
+    score_breakdown: dict[str, Any] | None = None
 
 
 class LexicalResponse(BaseModel):
@@ -60,6 +74,7 @@ class ConstraintRequest(BaseModel):
     meaning_of: str = Field(..., min_length=1)
     context: str | None = None
     limit: int = Field(default=10, ge=1, le=50)
+    vocabulary_preference: VocabularyPreference = "balanced"
 
 
 class ConstraintResult(BaseModel):
@@ -68,6 +83,11 @@ class ConstraintResult(BaseModel):
     rhyme: bool
     relation_match: bool
     reason: str
+    source: str | None = None
+    ml_score: float | None = None
+    behavior_score: float | None = None
+    confidence: float | None = None
+    score_breakdown: dict[str, Any] | None = None
 
 
 class ConstraintResponse(BaseModel):
@@ -79,6 +99,7 @@ class OneWordRequest(BaseModel):
     query: str = Field(..., min_length=1)
     context: str | None = None
     limit: int = Field(default=10, ge=1, le=10)
+    vocabulary_preference: VocabularyPreference = "balanced"
 
 
 class OneWordResult(BaseModel):
@@ -86,6 +107,11 @@ class OneWordResult(BaseModel):
     score: float
     reason: str
     meaning: str | None = None
+    source: str | None = None
+    ml_score: float | None = None
+    behavior_score: float | None = None
+    confidence: float | None = None
+    score_breakdown: dict[str, Any] | None = None
 
 
 class OneWordResponse(BaseModel):
@@ -107,6 +133,7 @@ class FeedbackRequest(BaseModel):
     reason: str | None = None
     session_id: str | None = None
     input_text: str | None = None
+    vocabulary_preference: VocabularyPreference | None = None
 
 
 class FeedbackResponse(BaseModel):
@@ -117,3 +144,18 @@ class FeedbackResponse(BaseModel):
     quality: Literal["bad", "average", "good"]
     label: int
     message: str
+
+
+class ImplicitFeedbackRequest(BaseModel):
+    task: Literal["editor_suggestion", "editor_rewrite", "lexical", "constraints", "oneword"]
+    candidate: str = Field(..., min_length=1)
+    action: Literal["inserted", "copied", "favorited"]
+    context: str | None = None
+    mode: Literal["write", "edit", "rewrite"] | None = None
+    input_payload: dict[str, Any] = Field(default_factory=dict)
+    pos: str | None = None
+    model_score: float | None = None
+    reason: str | None = None
+    session_id: str | None = None
+    input_text: str | None = None
+    vocabulary_preference: VocabularyPreference | None = None
