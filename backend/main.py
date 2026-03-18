@@ -14,7 +14,6 @@ from .api.suggestion_routes import router as suggestion_router
 from .api.feedback_routes import router as feedback_router
 from .config import CORS_ORIGINS
 from .db import db
-from .services.nlp.engine import initialize as initialize_nlp
 
 app = FastAPI(title="WordCraft API", version="0.1.0")
 logger = logging.getLogger(__name__)
@@ -52,9 +51,13 @@ async def _ensure_indexes_background() -> None:
 async def startup_indexes():
     # Do not block boot on index setup; Render health checks require fast port binding.
     asyncio.create_task(_ensure_indexes_background())
-    asyncio.create_task(asyncio.to_thread(initialize_nlp))
 
 
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+
+@app.get("/")
+async def root():
+    return {"service": "WordCraft API", "status": "ok", "health": "/health"}
