@@ -8,6 +8,13 @@ INDIA_PHONE_RE = re.compile(r"^\+91\s[6-9]\d{9}$")
 STRONG_PASSWORD_RE = re.compile(
     r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$"
 )
+MAX_BCRYPT_BYTES = 72
+
+
+def _bcrypt_safe(value: str) -> str:
+    if len(value.encode("utf-8")) > MAX_BCRYPT_BYTES:
+        raise ValueError("Password must be at most 72 bytes")
+    return value
 
 
 def _domain_looks_resolvable(email: str) -> bool:
@@ -51,7 +58,7 @@ class RegisterRequest(BaseModel):
             raise ValueError(
                 "Password must be 8+ chars with uppercase, lowercase, number, and special character"
             )
-        return value
+        return _bcrypt_safe(value)
 
     @field_validator("phone")
     @classmethod
@@ -126,7 +133,7 @@ class ChangePasswordRequest(BaseModel):
             raise ValueError(
                 "Password must be 8+ chars with uppercase, lowercase, number, and special character"
             )
-        return value
+        return _bcrypt_safe(value)
 
 
 class UserProfile(BaseModel):
