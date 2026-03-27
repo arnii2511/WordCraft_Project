@@ -168,6 +168,7 @@ def generate_suggestions(
         blank_present=blank_present,
         allow_rewrite=allow_rewrite,
         suggestions=top_words,
+        selection_text=pipeline.decision.selection_text,
     )
     rewrite_text = rewrite_candidates[0] if rewrite_candidates else ""
 

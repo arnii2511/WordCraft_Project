@@ -394,6 +394,13 @@ def get_constraint_matches(
 
     if exact_matches:
         candidate_pool = exact_matches + near_relation_rhymes
+        # Ensure we still surface near-match options for demos/usability.
+        min_pool = max(6, limit)
+        if len(candidate_pool) < min_pool and rhyme_candidates:
+            filler = [word for word in rhyme_candidates if word not in candidate_pool]
+            candidate_pool.extend(filler[: max(0, min_pool - len(candidate_pool))])
+        if len(candidate_pool) > len(exact_matches):
+            note = "Exact match found. Showing additional near matches for variety."
     else:
         if rhyme_candidates:
             fallback_stage = "rhyme_first"

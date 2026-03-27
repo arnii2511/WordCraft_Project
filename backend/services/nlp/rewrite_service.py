@@ -22,6 +22,17 @@ COMMON_REPLACEMENTS = [
 ]
 
 FILLER_WORDS = {"very", "really", "just", "quite", "basically", "actually", "literally"}
+POLISH_REPLACEMENTS = [
+    ("very good", "excellent"),
+    ("really good", "excellent"),
+    ("really nice", "pleasant"),
+    ("very nice", "pleasant"),
+    ("kind of", "somewhat"),
+    ("sort of", "somewhat"),
+    ("a bit", "slightly"),
+    ("in order to", "to"),
+    ("due to", "because of"),
+]
 
 TONE_ADVERBS: dict[str, str] = {
     "nostalgia": "softly",
@@ -83,6 +94,14 @@ def _remove_fillers(text: str) -> str:
             continue
         parts.append(token.text_with_ws)
     return _normalize_spacing("".join(parts))
+
+
+def _polish_text(text: str) -> str:
+    updated = text
+    for src, dst in POLISH_REPLACEMENTS:
+        updated = re.sub(rf"\b{re.escape(src)}\b", dst, updated, flags=re.IGNORECASE)
+    updated = _remove_fillers(updated)
+    return _normalize_spacing(updated)
 
 
 def _is_complete_by_dependencies(sentence: str) -> bool:
@@ -179,6 +198,22 @@ def _inject_tone_adverb(text: str, context: str) -> str:
     return text
 
 
+def _apply_to_selection(
+    sentence: str,
+    selection_text: str | None,
+    transform: callable,
+) -> str:
+    if not selection_text:
+        return transform(sentence)
+    target = selection_text.strip()
+    if not target:
+        return transform(sentence)
+    if target not in sentence:
+        return transform(sentence)
+    rewritten = transform(target)
+    return sentence.replace(target, rewritten, 1)
+
+
 def rewrite_sentence(
     sentence: str,
     context: str,
@@ -186,6 +221,7 @@ def rewrite_sentence(
     blank_present: bool,
     allow_rewrite: bool,
     suggestions: Iterable[str] | None = None,
+    selection_text: str | None = None,
 ) -> str:
     if not sentence or not allow_rewrite:
         return ""
@@ -198,12 +234,16 @@ def rewrite_sentence(
     if mode == "write":
         rewritten = base
     elif mode == "edit":
-        rewritten = _remove_fillers(base)
+        rewritten = _apply_to_selection(base, selection_text, _polish_text)
     elif mode == "rewrite":
-        rewritten = _remove_fillers(base)
+        rewritten = _apply_to_selection(base, selection_text, _remove_fillers)
         rewritten = _inject_tone_adverb(rewritten, context)
         if suggestions:
-            rewritten = _replace_with_suggestion(rewritten, next(iter(suggestions), ""))
+            rewritten = _apply_to_selection(
+                rewritten,
+                selection_text,
+                lambda text: _replace_with_suggestion(text, next(iter(suggestions), "")),
+            )
     else:
         rewritten = base
 
@@ -223,6 +263,7 @@ def rewrite_variants(
     allow_rewrite: bool,
     suggestions: Iterable[str] | None = None,
     max_variants: int = 3,
+    selection_text: str | None = None,
 ) -> list[str]:
     base = rewrite_sentence(
         sentence=sentence,
@@ -231,6 +272,7 @@ def rewrite_variants(
         blank_present=blank_present,
         allow_rewrite=allow_rewrite,
         suggestions=suggestions,
+        selection_text=selection_text,
     )
     if not base:
         return []
@@ -238,7 +280,11 @@ def rewrite_variants(
     variants = [base]
     if suggestions and mode == "rewrite":
         for suggestion in suggestions:
-            variant = _replace_with_suggestion(base, suggestion)
+            variant = _apply_to_selection(
+                base,
+                selection_text,
+                lambda text: _replace_with_suggestion(text, suggestion),
+            )
             if not variant or variant in variants:
                 continue
             if estimate_semantic_drift(base, variant) <= 0.52:

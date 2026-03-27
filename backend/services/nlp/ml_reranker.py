@@ -187,8 +187,28 @@ def _cosine(a: np.ndarray | None, b: np.ndarray | None) -> float:
     return float(np.dot(a, b) / denom)
 
 
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(v) for v in value]
+    if hasattr(value, "model_dump"):
+        try:
+            return _json_safe(value.model_dump())
+        except Exception:
+            return str(value)
+    if hasattr(value, "dict"):
+        try:
+            return _json_safe(value.dict())
+        except Exception:
+            return str(value)
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
 def _semantic_similarity(payload: dict[str, Any], candidate_text: str) -> float:
-    query_text = json.dumps(payload, ensure_ascii=True)
+    query_text = json.dumps(_json_safe(payload), ensure_ascii=True)
     q_vec = embeddings.embed_sentence(query_text)
     c_vec = embeddings.get_word_embedding(candidate_text)
     return max(0.0, min(1.0, (_cosine(q_vec, c_vec) + 1.0) / 2.0))
