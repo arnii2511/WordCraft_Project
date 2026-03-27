@@ -28,6 +28,19 @@ Protected:
 - Documents (`/documents*`)
 - Saved words (`/saved-words*`)
 
+## Service split (core / lexical / editor)
+
+WordCraft can run as one backend or as three focused services:
+
+- **Core API**: auth, documents, saved words, feedback
+- **Lexical API**: oneword, lexical, constraints
+- **Editor API**: suggest + rewrite flow
+
+Entrypoints:
+- `backend/main_core.py`
+- `backend/main_lexical.py`
+- `backend/main_editor.py`
+
 ## NLP Pipeline
 
 WordCraft uses a unified NLP pipeline for Draft/Polish/Transform and Tools:
@@ -44,6 +57,29 @@ Notes:
 - `/constraints` and `/oneword` return scored, explainable candidates.
 
 ## Local run
+
+### One-command local start
+
+```bat
+start-local.bat
+```
+
+### Manual local start (3 services + frontend)
+
+```bat
+venv\Scripts\python -m uvicorn backend.main_core:app --reload --host 127.0.0.1 --port 8000
+venv\Scripts\python -m uvicorn backend.main_lexical:app --reload --host 127.0.0.1 --port 8001
+venv\Scripts\python -m uvicorn backend.main_editor:app --reload --host 127.0.0.1 --port 8002
+npm run dev
+```
+
+Vite env (local):
+
+```env
+VITE_CORE_API_URL=http://127.0.0.1:8000
+VITE_LEXICAL_API_URL=http://127.0.0.1:8001
+VITE_EDITOR_API_URL=http://127.0.0.1:8002
+```
 
 See:
 - `QUICKSTART.md` for a fast setup
